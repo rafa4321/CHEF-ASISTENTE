@@ -7,7 +7,6 @@
     
     <script src="https://cdn.tailwindcss.com"></script> 
     <style>
-        /* Estilos esenciales para el chat */
         body { font-family: sans-serif; background-color: #f3f4f6; }
         .chat-container { height: 90vh; }
         .user-message { 
@@ -60,8 +59,7 @@
     </div>
 
     <script>
-        // *** INSERTA TU NUEVA CLAVE API AQUÍ ***
-        const API_KEY = "AIzaSyDLuMATmrUEE5eYPxlm9VaoSJggbaI-i84"; 
+        // *** CLAVE API ELIMINADA. Ahora se comunica con el servidor seguro de Vercel. ***
         const chatBox = document.getElementById('chat-box');
         
         window.onload = () => agregarMensaje("¡Hola! Soy Sabor Expres. 🍳 ¿Qué cocinamos hoy?", 'bot');
@@ -84,10 +82,6 @@
             const input = document.getElementById('user-input');
             const texto = input.value.trim();
             if (!texto) return;
-            if (API_KEY === "TU_NUEVA_CLAVE_API_AQUI") {
-                 agregarMensaje("⚠️ Error: Inserta tu clave API en el código antes de continuar.", 'bot');
-                 return;
-            }
 
             agregarMensaje(texto, 'user');
             input.value = '';
@@ -95,31 +89,25 @@
             document.getElementById('btn-enviar').disabled = true;
 
             try {
-                // LLAMADA A LA API DE GEMINI
-                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${API_KEY}`, {
+                // LLAMAMOS AL SERVIDOR SEGURO DE VERCEL /api/chat
+                const response = await fetch("/api/chat", {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        contents: [{ parts: [{ text: texto }] }],
-                        config: {
-                             systemInstruction: "Eres un chef experto llamado Sabor Expres. Responde solo sobre cocina, recetas y alimentos. Sé amable y usa emojis y habla siempre en español." 
-                        }
-                    })
+                    body: JSON.stringify({ message: texto })
                 });
 
                 const data = await response.json();
                 
-                if (data.error) throw new Error(data.error.message);
+                if (data.error) throw new Error(data.error);
                 
-                const respuesta = data.candidates[0].content.parts[0].text;
-                let respuestaFormateada = respuesta.replace(/\*\*(.*?)\*\*/g, '<b>$1</b>').replace(/\n/g, '<br>');
+                // La respuesta ya viene lista del servidor seguro
+                let respuestaFormateada = data.reply.replace(/\*\*(.*?)\*\*/g, '<b>$1</b>').replace(/\n/g, '<br>');
                 
                 agregarMensaje(respuestaFormateada, 'bot');
 
             } catch (error) {
                 console.error("Error al conectar con Gemini:", error);
-                // Si falla en el servidor, la clave es inválida o fue revocada.
-                agregarMensaje("⚠️ Error: La clave API actual ha sido deshabilitada por seguridad o no es válida. Debes generar una nueva.", 'bot');
+                agregarMensaje("⚠️ Error: No se pudo conectar con el servidor seguro del Chef. Asegúrate de que la clave API esté configurada en Vercel.", 'bot');
             } finally {
                 document.getElementById('loading').classList.add('hidden');
                 document.getElementById('btn-enviar').disabled = false;
