@@ -1,0 +1,11 @@
+{
+  "name": "sabor-expres-serverless",
+  "version": "1.0.0",
+  "description": "Servidor seguro para Gemini en Vercel",
+  "dependencies": {
+    "node-fetch": "^3.3.2" 
+  },
+  "scripts": {
+    "start": "echo 'Deploying static files and serverless functions.'"
+  }
+}
