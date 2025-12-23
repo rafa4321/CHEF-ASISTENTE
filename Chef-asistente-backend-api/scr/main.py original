@@ -1,0 +1,77 @@
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware # 1. Importamos Middleware
+from pydantic import BaseModel
+from typing import List
+import os 
+import json 
+
+# --- Configuración Gemini ---
+try:
+    from google import genai 
+    from google.genai.errors import APIError
+    
+    GEMINI_KEY = os.getenv("GEMINI_API_KEY")
+    if not GEMINI_KEY:
+        GEMINI_CLIENT = None
+        print("🔴 ERROR: GEMINI_API_KEY no configurada.")
+    else:
+        GEMINI_CLIENT = genai.Client(api_key=GEMINI_KEY)
+        print("✅ Cliente de Gemini inicializado.")
+except Exception as e:
+    GEMINI_CLIENT = None
+    print(f"🔴 Error Gemini: {e}")
+
+app = FastAPI()
+
+# --- 2. CONFIGURACIÓN CORS (EL PASE DE ACCESO) ---
+# Esto permite que Chrome (o cualquier origen) hable con tu API
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"], # Permite todos los orígenes
+    allow_credentials=True,
+    allow_methods=["*"], # Permite todos los métodos (GET, POST, etc.)
+    allow_headers=["*"], # Permite todos los encabezados
+)
+# --------------------------------------------------
+
+class RecipeOption(BaseModel):
+    title: str
+    description: str
+    recommendations: List[str]
+    prep_time: str 
+
+@app.get("/")
+async def root():
+    return {"message": "✅ SERVIDOR ACTIVO"}
+
+@app.get("/search")
+async def search_recipes(query: str):
+    if not GEMINI_CLIENT:
+        raise HTTPException(status_code=500, detail="Error: Cliente Gemini inactivo.")
+
+    # Prompt optimizado para JSON
+    prompt = f"""
+    Genera una receta para: "{query}".
+    Responde SOLO con este JSON exacto (sin bloques de código markdown):
+    [
+        {{
+            "title": "Nombre del Plato", 
+            "description": "Descripción corta", 
+            "recommendations": ["Tip 1", "Tip 2"], 
+            "prep_time": "Tiempo"
+        }}
+    ]
+    """
+    
+    try:
+        response = GEMINI_CLIENT.models.generate_content(
+            model='gemini-2.5-flash', 
+            contents=prompt
+        )
+        # Limpieza básica por si Gemini añade ```json ... ```
+        clean_text = response.text.replace('```json', '').replace('```', '').strip()
+        return json.loads(clean_text)
+        
+    except Exception as e:
+        print(f"Error: {e}")
+        raise HTTPException(status_code=500, detail=f"Error IA: {str(e)}")

@@ -1,0 +1,44 @@
+# [Tu Proyecto Flutter]/pubspec.yaml
+
+name: nombre_de_tu_proyecto # Mantén el nombre actual de tu proyecto
+description: Tu descripción actual. # Mantén tu descripción actual
+
+publish_to: 'none' # Remove this line if you wish to publish to pub.dev
+
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.2.0 <4.0.0' # Mantén tu versión de SDK actual
+
+# =========================================================
+# 🎯 MODIFICACIÓN CRÍTICA AQUÍ (Se agrega el paquete http)
+# =========================================================
+dependencies:
+  flutter:
+    sdk: flutter
+  
+  # Otras dependencias que ya tengas...
+  cupertino_icons: ^1.0.6 
+
+  # >>>>> AÑADE ESTA LÍNEA <<<<<
+  http: ^1.1.0 
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^2.0.0
+
+# El resto del archivo (sección flutter:)
+flutter:
+  # El resto de tu configuración de assets e imágenes...
+  uses-material-design: true
+  
+  # assets:
+  #   - images/
+  
+  # fonts:
+  #   - family: Schyler
+  #     fonts:
+  #       - asset: fonts/Schyler-Regular.ttf
+  #       - asset: fonts/Schyler-Italic.ttf
+  #         style: italic

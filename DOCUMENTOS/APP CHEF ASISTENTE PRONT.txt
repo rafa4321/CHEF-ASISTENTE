@@ -1,0 +1,121 @@
+COMO EL MEJOR DE LOS DESARROLLADORES DE APP, DE ALTO IMPACTO, CREA UNA APP ROBUSTA Y SOLIDA QUE FUNCIONE CON LA PLATAFORMA DE GENIMI , ESTA APP ES UN ASISTENTE DE CHEF QUE TENDRA FUNCIONES 
+Un asistente que no solo te guía: te hace cocinar mejor, más rápido y sin dramas.
+
+🔥 1. Módulo de Recetas Inteligentes
+Qué hace:
+
+Te crea recetas con lo que tengas (modo “abrí la heladera y resolveme la vida”).
+
+Ajusta porciones, calorías y presupuesto.
+
+Sugiere sustituciones basadas en técnica culinaria real.
+
+Extra:
+
+Modo “receta clásica”: reproducir platos tradicionales sin inventos raros.
+
+🥕 2. Guía Paso a Paso (Chef al Oído)
+Funciona así:
+
+Te lee cada paso como un chef serio: claro y directo.
+
+Temporizadores automáticos.
+
+Avisos inteligentes ("Si seguís cortando así, te queda una ensalada de puré").
+
+Beneficio:
+
+Cocinar sin estrés ni accidentes tontos.
+
+📦 3. Control Total de la Despensa
+Características:
+
+Registro de ingredientes.
+
+Avisos de vencimiento.
+
+Recetas con lo que está por caducar (modo “ahorro obligatorio”).
+
+Lista de compras automática.
+
+🧾 4. Menús Semanales con Costos
+
+Ideal para hogares y emprendimientos.
+
+Incluye:
+
+Menú balanceado.
+
+Versión económica.
+
+Cálculo de costo por plato.
+
+Plan de compra de la semana.
+
+🔪 5. Optimización del Proceso
+Qué hace:
+
+Organiza tu mise en place.
+
+Te indica qué pasos pueden hacerse antes.
+
+Reduce tiempos muertos.
+
+Te da opciones para usar menos utensilios y ensuciar menos (el sueño de cualquiera).
+
+👨‍🏫 6. Academia Culinaria Integrada
+Incluye:
+
+Técnicas básicas y avanzadas.
+
+Retos diarios.
+
+Consejos tradicionales de cocina real.
+
+Clases rápidas: “cómo no arruinar un arroz”, “cómo sellar una carne sin asustarla”, etc.
+
+🥼 7. Seguridad Alimentaria
+
+Porque el estómago no perdona:
+
+Temperaturas seguras por alimento.
+
+Conservación.
+
+Higiene.
+
+Manejo de crudos y cocidos.
+
+📊 8. Cálculo de Costos y Rentabilidad
+
+Si es para negocio:
+
+Precio sugerido según margen.
+
+Control de desperdicio.
+
+Recetas estandarizadas.
+
+Reporte diario.
+
+🤖 9. Integración Inteligente
+
+App móvil.
+
+Compatible con horno smart, heladera smart, asistentes de voz.
+
+Exporta listas a WhatsApp o correo.
+
+✨ 10. Creatividad Gastronómica
+
+Para cuando quieras innovar:
+
+Platos fusión.
+
+Presentaciones atractivas.
+
+Ideas para TikTok si que mostrar tu arte culinario.
+TODO ESTO ADAPTADO A TRES NIVELES DE  ADQUISICIOn: gratis, avanzado y profesional.
+es importante la configuración de idioma.
+Con una presentación impactante elegante; que use una interfase de usuario a traves de texto o voz. y pueda capturar imagen para recomendar una receta.
+esta app se dividirá en frontend y backend.
