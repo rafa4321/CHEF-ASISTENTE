@@ -1,0 +1,103 @@
+# Chef-asistente-backend-api/src/third_party/gemini_client.py
+
+from google import genai
+from google.genai import types
+from google.genai.errors import APIError
+import os
+import json
+from typing import List, Dict, Any
+
+# Cargar la llave de la API desde las variables de entorno
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+
+class GeminiClient:
+    """
+    Cliente para interactuar con la API de Google Gemini.
+    """
+    def __init__(self):
+        # Inicialización del cliente, se asume que la llave está en el entorno
+        if not GEMINI_API_KEY:
+            raise ValueError("GEMINI_API_KEY no está configurada en las variables de entorno.")
+        
+        self.client = genai.Client(api_key=GEMINI_API_KEY)
+        # Definición del modelo principal para lógica compleja y JSON
+        self.generation_model = 'gemini-2.5-pro'
+        # Definición del modelo para tareas rápidas de visión/chat
+        self.vision_model = 'gemini-2.5-flash'
+
+
+    def generate_structured_recipe(self, prompt: str) -> Dict[str, Any]:
+        """
+        Genera contenido estructurado (Recetas, Menús) forzando la salida JSON.
+        """
+        try:
+            # Configuración para forzar la respuesta JSON y el esquema
+            config = types.GenerateContentConfig(
+                response_mime_type="application/json",
+                # Opcional: response_schema si queremos asegurar una estructura JSON específica
+            )
+
+            # Llamada a la API con el prompt construido
+            response = self.client.models.generate_content(
+                model=self.generation_model,
+                contents=[prompt],
+                config=config,
+            )
+
+            # Parsear la respuesta JSON
+            return json.loads(response.text)
+
+        except APIError as e:
+            print(f"Error en la API de Gemini durante la generación: {e}")
+            raise Exception("Error en el servicio de generación de IA.")
+        except json.JSONDecodeError:
+            print(f"Error: Gemini no devolvió JSON válido. Respuesta: {response.text}")
+            raise Exception("La IA no pudo generar una respuesta estructurada válida.")
+
+
+    def analyze_image_for_ingredients(self, image_path: str, context: str) -> List[str]:
+        """
+        Analiza una imagen (foto del refrigerador) para identificar ingredientes.
+        """
+        # 1. Cargar la imagen: se asume que la imagen está accesible o se convierte a un objeto FileData
+        # En una aplicación real, se usaría un archivo subido o un URI de Cloud Storage.
+        # Por simplicidad, este ejemplo asume que la imagen se carga correctamente.
+        
+        image = types.Part.from_uri(uri=image_path, mime_type="image/jpeg")
+
+        # 2. Construcción del prompt de Visión
+        vision_prompt = f"Analiza la siguiente imagen de comida. Ignora el fondo. Lista únicamente los ingredientes comestibles y frescos que puedes identificar. Devuelve solo la lista de nombres separados por coma. Contexto: {context}"
+        
+        try:
+            response = self.client.models.generate_content(
+                model=self.vision_model,
+                contents=[image, vision_prompt],
+            )
+            
+            # 3. Limpieza de la respuesta (ej. eliminar puntos finales y dividir)
+            clean_text = response.text.strip().replace('.', '')
+            return [item.strip() for item in clean_text.split(',')]
+
+        except APIError as e:
+            print(f"Error en la API de Gemini (Visión): {e}")
+            return [] # Retorna lista vacía si falla
+
+
+# Ejemplo de uso (para pruebas locales)
+if __name__ == '__main__':
+    # Aquí se simularía la llamada, asumiendo que GEMINI_API_KEY está configurada
+    try:
+        gemini_client = GeminiClient()
+        
+        # --- Prueba 1: Generación Estructurada (Simulada) ---
+        test_prompt = "Genera una receta fácil con pollo y arroz. Tiempo máximo 30 minutos. Responde en JSON."
+        # recipe_json = gemini_client.generate_structured_recipe(test_prompt)
+        # print("Receta Generada (Simulación):", recipe_json)
+        
+        # --- Prueba 2: Análisis de Imagen (Simulada) ---
+        # Es necesario un path de imagen real para probar esto
+        # ingredients = gemini_client.analyze_image_for_ingredients("gs://tu-bucket/foto_despensa.jpg", "Busca frutas y verduras.")
+        # print("Ingredientes Identificados (Simulación):", ingredients)
+
+    except Exception as e:
+        print(f"Falló la inicialización o la prueba: {e}")

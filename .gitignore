@@ -1,0 +1,6 @@
+.env
+**/__pycache__/
+*.docx
+~$*.docx
+DOCUMENTOS/
+node_modules/
