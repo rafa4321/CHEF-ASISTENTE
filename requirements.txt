@@ -1,8 +1,4 @@
 fastapi
-uvicorn[standard]
-python-multipart
-pydantic
-pydantic-settings
-google-genai
-requests
+uvicorn
+groq
 python-dotenv
