@@ -6,7 +6,7 @@ from groq import Groq
 
 app = FastAPI()
 
-# Permitir que Flutter (localhost) hable con Render
+# Configuración de CORS para evitar bloqueos en el navegador
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -15,22 +15,22 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# REEMPLAZA ESTO CON TU CLAVE DE GROQ
-client = Groq(api_key="TU_CLAVE_AQUÍ")
+# REEMPLAZA CON TU CLAVE REAL DE GROQ
+client = Groq(api_key="TU_CLAVE_DE_GROQ_AQUÍ")
 
 @app.get("/search")
 async def search_recipe(query: str = Query(...)):
-    # Filtro de seguridad para que solo acepte comida
+    # Prompt diseñado para obtener JSON puro y real
     prompt = f"""
-    Eres un Chef experto. Si el usuario pregunta por algo que NO es comida (como carros o herramientas), 
-    di que solo sabes de cocina. Si es comida, genera una receta REAL para: {query}.
-    Responde ÚNICAMENTE en este formato JSON:
+    Eres un Chef profesional. Genera una receta detallada y real para: {query}.
+    Responde estrictamente en formato JSON con esta estructura:
     {{
       "title": "Nombre de la receta",
-      "ingredients": ["1kg de algo", "2 tazas de otro"],
+      "ingredients": ["1 unidad de algo", "500g de otro"],
       "instructions": ["Paso 1...", "Paso 2..."],
-      "description": "Explicación breve"
+      "description": "Breve reseña."
     }}
+    Si el tema no es cocina, indica que solo eres un Chef.
     """
     try:
         completion = client.chat.completions.create(
@@ -38,6 +38,11 @@ async def search_recipe(query: str = Query(...)):
             model="llama3-8b-8192",
             response_format={"type": "json_object"}
         )
+        # Convertimos la respuesta en un diccionario de Python
         return json.loads(completion.choices[0].message.content)
     except Exception as e:
-        return {"title": "Error", "ingredients": [], "instructions": [str(e)], "description": ""}
+        return {"title": "Error", "ingredients": [], "instructions": [str(e)]}
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=10000)
