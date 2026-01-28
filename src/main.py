@@ -18,35 +18,27 @@ client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
 
 @app.get("/search")
 async def search_recipe(query: str = Query(...)):
-    # Filtro de contenido y personalidad de Chef profesional
+    # Personalidad de Chef de alto nivel para Google Play
     system_message = (
-        "Eres un Chef estrella Michelin. Tu misión es dar recetas detalladas, claras y profesionales. "
-        "REGLA CRÍTICA: Si el usuario pregunta por algo que NO sea gastronómico (ej. motores, mecánica, política, electrónica), "
-        "responde únicamente: {'error': 'Lo siento, como Chef experto solo puedo asistirte con recetas y temas culinarios.'}"
+        "Eres un Chef de prestigio internacional. Solo respondes sobre gastronomía. "
+        "Si la consulta no es culinaria, responde estrictamente: {'error': 'Lo siento, como Chef experto solo puedo asistirte con recetas.'}"
     )
     
     user_prompt = (
-        f"Proporciona una receta detallada para: {query}. "
-        "La respuesta debe ser un objeto JSON con: "
-        "'title' (nombre del plato), "
-        "'description' (una breve explicación de qué es el plato y su origen), "
-        "'ingredients' (lista de strings con cantidades exactas), "
-        "'instructions' (pasos numerados detallados y explicativos)."
+        f"Genera una receta detallada para: {query}. "
+        "Responde en JSON con estas llaves exactas: "
+        "'title', 'description', 'time', 'difficulty', 'ingredients', 'instructions', 'chef_tip'."
     )
 
     try:
         completion = client.chat.completions.create(
-            messages=[
-                {"role": "system", "content": system_message},
-                {"role": "user", "content": user_prompt}
-            ],
+            messages=[{"role": "system", "content": system_message}, {"role": "user", "content": user_prompt}],
             model="llama-3.3-70b-versatile",
             response_format={"type": "json_object"}
         )
         
-        datos = json.loads(completion.choices[0].message.content)
-        # Forzamos la codificación correcta para evitar errores de tildes
-        return JSONResponse(content=datos, media_type="application/json; charset=utf-8")
-        
-    except Exception as e:
-        return JSONResponse(content={"error": "Hubo un problema al conectar con la cocina."}, status_code=500)
+        receta = json.loads(completion.choices[0].message.content)
+        # UTF-8 garantizado para evitar errores de tildes
+        return JSONResponse(content=receta, media_type="application/json; charset=utf-8")
+    except Exception:
+        return JSONResponse(content={"error": "Error en la cocina digital."}, status_code=500)
