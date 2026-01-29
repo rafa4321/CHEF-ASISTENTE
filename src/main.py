@@ -1,44 +1,41 @@
 import os
-import json
-from fastapi import FastAPI, Query
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi import FastAPI
 from groq import Groq
+import json
 
 app = FastAPI()
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
+client = Groq(api_key="TU_API_KEY_AQUI")
 
 @app.get("/search")
-async def search_recipe(query: str = Query(...)):
-    # Personalidad de Chef de alto nivel para Google Play
-    system_message = (
-        "Eres un Chef de prestigio internacional. Solo respondes sobre gastronomía. "
-        "Si la consulta no es culinaria, responde estrictamente: {'error': 'Lo siento, como Chef experto solo puedo asistirte con recetas.'}"
-    )
+async def search_recipe(query: str):
+    prompt = f"""
+    Eres un Chef de alta cocina. Crea una receta para: {query}.
+    Responde ÚNICAMENTE en formato JSON con esta estructura exacta:
+    {{
+      "title": "Nombre del plato",
+      "time": "Tiempo estimado",
+      "difficulty": "Media/Baja/Alta",
+      "ingredients": ["item 1", "item 2"],
+      "instructions": ["paso 1", "paso 2"],
+      "chef_tip": "Un consejo profesional"
+    }}
+    """
     
-    user_prompt = (
-        f"Genera una receta detallada para: {query}. "
-        "Responde en JSON con estas llaves exactas: "
-        "'title', 'description', 'time', 'difficulty', 'ingredients', 'instructions', 'chef_tip'."
-    )
-
     try:
         completion = client.chat.completions.create(
-            messages=[{"role": "system", "content": system_message}, {"role": "user", "content": user_prompt}],
-            model="llama-3.3-70b-versatile",
+            model="llama3-8b-8192",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.5,
             response_format={"type": "json_object"}
         )
         
-        receta = json.loads(completion.choices[0].message.content)
-        # UTF-8 garantizado para evitar errores de tildes
-        return JSONResponse(content=receta, media_type="application/json; charset=utf-8")
-    except Exception:
-        return JSONResponse(content={"error": "Error en la cocina digital."}, status_code=500)
+        # Convertimos la respuesta de texto a un diccionario real de Python
+        recipe_data = json.loads(completion.choices[0].message.content)
+        return recipe_data # Enviamos un JSON puro
+    except Exception as e:
+        return {"error": str(e)}
+
+if __name__ == "__main__":
+    import uvicorn
+    port = int(os.environ.get("PORT", 10000))
+    uvicorn.run(app, host="0.0.0.0", port=port)
