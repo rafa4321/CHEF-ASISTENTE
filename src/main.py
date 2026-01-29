@@ -6,7 +6,6 @@ from groq import Groq
 
 app = FastAPI()
 
-# Configuración de CORS para conectar con Flutter
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -34,8 +33,7 @@ async def search_recipe(query: str):
             "instructions": list(data.get("instructions", []))
         }
     except Exception:
-        # Estructura de respaldo si algo falla
-        return {"title": "Error", "ingredients": [], "instructions": [], "time": "N/A", "difficulty": "N/A"}
+        return {"title": "Error de IA", "ingredients": [], "instructions": [], "time": "N/A", "difficulty": "N/A"}
 
 if __name__ == "__main__":
     import uvicorn
