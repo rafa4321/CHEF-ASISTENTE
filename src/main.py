@@ -18,9 +18,15 @@ client = Groq(api_key="TU_API_KEY_AQUI")
 @app.get("/search")
 async def search_recipe(query: str):
     prompt = f"""
-    Eres un Chef estrella. Crea una receta detallada para: {query}.
-    Responde ÚNICAMENTE en formato JSON con estos campos:
-    "title", "time", "difficulty", "ingredients" (lista), "instructions" (lista), "chef_tip".
+    Eres un Chef. Genera una receta para: {query}.
+    Responde estrictamente en JSON con este formato:
+    {{
+      "title": "Nombre",
+      "time": "Tiempo",
+      "difficulty": "Nivel",
+      "ingredients": ["item 1", "item 2"],
+      "instructions": ["paso 1", "paso 2"]
+    }}
     """
     try:
         completion = client.chat.completions.create(
@@ -28,20 +34,19 @@ async def search_recipe(query: str):
             messages=[{"role": "user", "content": prompt}],
             response_format={"type": "json_object"}
         )
-        # Convertimos la respuesta en un diccionario real de Python
-        data = json.loads(completion.choices[0].message.content)
         
-        # Estructura de salida garantizada (evita nulos en el cliente)
+        # Validamos los datos antes de enviarlos a Flutter
+        raw_data = json.loads(completion.choices[0].message.content)
+        
         return {
-            "title": data.get("title", "Receta"),
-            "time": data.get("time", "N/A"),
-            "difficulty": data.get("difficulty", "N/A"),
-            "ingredients": data.get("ingredients", []),
-            "instructions": data.get("instructions", []),
-            "chef_tip": data.get("chef_tip", "")
+            "title": str(raw_data.get("title", "Receta")),
+            "time": str(raw_data.get("time", "N/A")),
+            "difficulty": str(raw_data.get("difficulty", "N/A")),
+            "ingredients": list(raw_data.get("ingredients", [])),
+            "instructions": list(raw_data.get("instructions", []))
         }
     except Exception as e:
-        return {"error": str(e), "ingredients": [], "instructions": []}
+        return {"title": "Error de conexión", "ingredients": [], "instructions": [], "time": "N/A", "difficulty": "N/A"}
 
 if __name__ == "__main__":
     import uvicorn
