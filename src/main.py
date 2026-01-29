@@ -6,6 +6,7 @@ from groq import Groq
 
 app = FastAPI()
 
+# Configuración de CORS para permitir la conexión desde Flutter Web
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -15,23 +16,41 @@ app.add_middleware(
 
 @app.get("/search")
 async def search_recipe(query: str):
-    # Verificación de la API Key en tiempo real
+    # Paso 1: Verificar la API Key en el entorno
     api_key = os.environ.get("GROQ_API_KEY")
+    
     if not api_key:
-        return {"error": "LLAVE_FALTANTE", "detalle": "La variable GROQ_API_KEY no existe en Render"}
+        return {"title": "Error: GROQ_API_KEY no configurada en Render", "ingredients": [], "instructions": []}
 
     try:
         client = Groq(api_key=api_key)
+        prompt = f"Genera una receta de {query} en JSON con campos: title, time, difficulty, ingredients (lista), instructions (lista)."
+        
         completion = client.chat.completions.create(
             model="llama3-8b-8192",
-            messages=[{"role": "user", "content": f"Receta de {query} en JSON"}],
+            messages=[{"role": "user", "content": prompt}],
             response_format={"type": "json_object"}
         )
-        return json.loads(completion.choices[0].message.content)
+        
+        data = json.loads(completion.choices[0].message.content)
+        return {
+            "title": data.get("title", f"Receta de {query}"),
+            "time": data.get("time", "N/A"),
+            "difficulty": data.get("difficulty", "N/A"),
+            "ingredients": list(data.get("ingredients", [])),
+            "instructions": list(data.get("instructions", []))
+        }
     except Exception as e:
-        # Esto nos mostrará el error REAL en el navegador
-        return {"error": "FALLO_GROQ", "detalle": str(e)}
+        # Esto te dirá el error real (ej: API Key inválida) en el navegador
+        return {
+            "title": "Error de IA", 
+            "detalle": str(e),
+            "ingredients": [], 
+            "instructions": []
+        }
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
+    # Puerto dinámico para Render
+    port = int(os.environ.get("PORT", 10000))
+    uvicorn.run(app, host="0.0.0.0", port=port)
