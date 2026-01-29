@@ -6,7 +6,6 @@ from groq import Groq
 
 app = FastAPI()
 
-# Permite que Flutter Web se conecte sin bloqueos
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -18,18 +17,31 @@ client = Groq(api_key="TU_API_KEY_AQUI")
 
 @app.get("/search")
 async def search_recipe(query: str):
-    prompt = f"Crea una receta de {query}. Responde SOLO en JSON con campos: title, time, difficulty, ingredients (lista), instructions (lista)."
-    
+    prompt = f"""
+    Eres un Chef estrella. Crea una receta detallada para: {query}.
+    Responde ÚNICAMENTE en formato JSON con estos campos:
+    "title", "time", "difficulty", "ingredients" (lista), "instructions" (lista), "chef_tip".
+    """
     try:
         completion = client.chat.completions.create(
             model="llama3-8b-8192",
             messages=[{"role": "user", "content": prompt}],
             response_format={"type": "json_object"}
         )
-        # Retornamos el diccionario directamente para que FastAPI lo envíe como JSON
-        return json.loads(completion.choices[0].message.content)
+        # Convertimos la respuesta en un diccionario real de Python
+        data = json.loads(completion.choices[0].message.content)
+        
+        # Estructura de salida garantizada (evita nulos en el cliente)
+        return {
+            "title": data.get("title", "Receta"),
+            "time": data.get("time", "N/A"),
+            "difficulty": data.get("difficulty", "N/A"),
+            "ingredients": data.get("ingredients", []),
+            "instructions": data.get("instructions", []),
+            "chef_tip": data.get("chef_tip", "")
+        }
     except Exception as e:
-        return {"title": "Error", "ingredients": [], "instructions": [], "time": "N/A", "difficulty": "N/A"}
+        return {"error": str(e), "ingredients": [], "instructions": []}
 
 if __name__ == "__main__":
     import uvicorn
