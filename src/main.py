@@ -6,7 +6,6 @@ from groq import Groq
 
 app = FastAPI()
 
-# Configuración de CORS: Permite que tu app de Flutter Web se comunique con el servidor
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -14,47 +13,25 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# PASO 1: Conexión con la variable de entorno de Render
-# Asegúrate de que en Render la llave se llame exactamente GROQ_API_KEY
-api_key_env = os.environ.get("GROQ_API_KEY")
-client = Groq(api_key=api_key_env)
-
 @app.get("/search")
 async def search_recipe(query: str):
-    # Prompt optimizado para recibir un JSON estricto
-    prompt = f"Genera una receta de {query} en JSON con campos: title, time, difficulty, ingredients (lista), instructions (lista)."
-    
+    # Verificación de la API Key en tiempo real
+    api_key = os.environ.get("GROQ_API_KEY")
+    if not api_key:
+        return {"error": "LLAVE_FALTANTE", "detalle": "La variable GROQ_API_KEY no existe en Render"}
+
     try:
+        client = Groq(api_key=api_key)
         completion = client.chat.completions.create(
             model="llama3-8b-8192",
-            messages=[{"role": "user", "content": prompt}],
+            messages=[{"role": "user", "content": f"Receta de {query} en JSON"}],
             response_format={"type": "json_object"}
         )
-        
-        # Procesamos la respuesta de la IA
-        data = json.loads(completion.choices[0].message.content)
-        
-        # Retornamos los datos asegurando que ingredientes e instrucciones sean listas
-        return {
-            "title": str(data.get("title", f"Receta de {query}")),
-            "time": str(data.get("time", "N/A")),
-            "difficulty": str(data.get("difficulty", "N/A")),
-            "ingredients": list(data.get("ingredients", [])),
-            "instructions": list(data.get("instructions", []))
-        }
+        return json.loads(completion.choices[0].message.content)
     except Exception as e:
-        # Si la API Key falla o la IA no responde, enviamos este error controlado
-        print(f"Error detallado: {e}")
-        return {
-            "title": "Error de IA",
-            "ingredients": ["Verifica la API Key en Render"],
-            "instructions": ["Error en la comunicación con Groq"],
-            "time": "N/A",
-            "difficulty": "N/A"
-        }
+        # Esto nos mostrará el error REAL en el navegador
+        return {"error": "FALLO_GROQ", "detalle": str(e)}
 
 if __name__ == "__main__":
     import uvicorn
-    # Render asigna un puerto automáticamente mediante la variable PORT
-    port = int(os.environ.get("PORT", 10000))
-    uvicorn.run(app, host="0.0.0.0", port=port)
+    uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
