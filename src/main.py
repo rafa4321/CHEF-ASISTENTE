@@ -1,41 +1,36 @@
 import os
-from fastapi import FastAPI
-from groq import Groq
 import json
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from groq import Groq
 
 app = FastAPI()
+
+# Permite que Flutter Web se conecte sin bloqueos
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 client = Groq(api_key="TU_API_KEY_AQUI")
 
 @app.get("/search")
 async def search_recipe(query: str):
-    prompt = f"""
-    Eres un Chef de alta cocina. Crea una receta para: {query}.
-    Responde ÚNICAMENTE en formato JSON con esta estructura exacta:
-    {{
-      "title": "Nombre del plato",
-      "time": "Tiempo estimado",
-      "difficulty": "Media/Baja/Alta",
-      "ingredients": ["item 1", "item 2"],
-      "instructions": ["paso 1", "paso 2"],
-      "chef_tip": "Un consejo profesional"
-    }}
-    """
+    prompt = f"Crea una receta de {query}. Responde SOLO en JSON con campos: title, time, difficulty, ingredients (lista), instructions (lista)."
     
     try:
         completion = client.chat.completions.create(
             model="llama3-8b-8192",
             messages=[{"role": "user", "content": prompt}],
-            temperature=0.5,
             response_format={"type": "json_object"}
         )
-        
-        # Convertimos la respuesta de texto a un diccionario real de Python
-        recipe_data = json.loads(completion.choices[0].message.content)
-        return recipe_data # Enviamos un JSON puro
+        # Retornamos el diccionario directamente para que FastAPI lo envíe como JSON
+        return json.loads(completion.choices[0].message.content)
     except Exception as e:
-        return {"error": str(e)}
+        return {"title": "Error", "ingredients": [], "instructions": [], "time": "N/A", "difficulty": "N/A"}
 
 if __name__ == "__main__":
     import uvicorn
-    port = int(os.environ.get("PORT", 10000))
-    uvicorn.run(app, host="0.0.0.0", port=port)
+    uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
