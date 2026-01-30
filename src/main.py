@@ -23,12 +23,12 @@ async def search_recipe(query: str):
     try:
         client = Groq(api_key=api_key)
         
-        # System Prompt con filtro de contenido
+        # System Prompt estricto para cumplimiento de contenido gastronómico
         prompt = (
-            f"Actúa como un Chef de alta cocina. Si el usuario pide algo que NO sea una receta de comida o bebida "
-            f"(por ejemplo: '{query}'), responde estrictamente con este JSON: "
-            f"{{'title': 'Error: Solo recetas de cocina', 'ingredients': [], 'instructions': []}}. "
-            f"Si es comida, genera una receta detallada de {query} en JSON con estos campos: "
+            f"Eres un Chef de alta cocina. Si el usuario solicita algo que NO sea una receta de comida o bebida "
+            f"(ejemplo: '{query}'), responde obligatoriamente con este JSON: "
+            f"{{'title': 'Error: Solo recetas de cocina', 'ingredients': [], 'instructions': [], 'time': 'N/A', 'difficulty': 'N/A'}}. "
+            f"Si es un alimento, genera una receta de {query} en JSON con: "
             f"title, time, difficulty, ingredients (lista), instructions (lista)."
         )
         
