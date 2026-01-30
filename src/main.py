@@ -22,30 +22,25 @@ async def search_recipe(query: str):
 
     try:
         client = Groq(api_key=api_key)
-        prompt = f"Genera una receta de {query} en JSON con campos: title, time, difficulty, ingredients (lista), instructions (lista)."
         
-        # CAMBIO CLAVE: Usamos un modelo activo
+        # System Prompt con filtro de contenido
+        prompt = (
+            f"Actúa como un Chef de alta cocina. Si el usuario pide algo que NO sea una receta de comida o bebida "
+            f"(por ejemplo: '{query}'), responde estrictamente con este JSON: "
+            f"{{'title': 'Error: Solo recetas de cocina', 'ingredients': [], 'instructions': []}}. "
+            f"Si es comida, genera una receta detallada de {query} en JSON con estos campos: "
+            f"title, time, difficulty, ingredients (lista), instructions (lista)."
+        )
+        
         completion = client.chat.completions.create(
-            model="llama-3.3-70b-versatile", 
+            model="llama-3.3-70b-versatile",
             messages=[{"role": "user", "content": prompt}],
             response_format={"type": "json_object"}
         )
         
-        data = json.loads(completion.choices[0].message.content)
-        return {
-            "title": data.get("title", f"Receta de {query}"),
-            "time": data.get("time", "N/A"),
-            "difficulty": data.get("difficulty", "N/A"),
-            "ingredients": list(data.get("ingredients", [])),
-            "instructions": list(data.get("instructions", []))
-        }
+        return json.loads(completion.choices[0].message.content)
     except Exception as e:
-        return {
-            "title": "Error de IA",
-            "detalle": str(e),
-            "ingredients": [],
-            "instructions": []
-        }
+        return {"title": "Error de IA", "detalle": str(e), "ingredients": [], "instructions": []}
 
 if __name__ == "__main__":
     import uvicorn
