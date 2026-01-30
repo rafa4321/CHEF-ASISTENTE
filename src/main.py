@@ -6,7 +6,6 @@ from groq import Groq
 
 app = FastAPI()
 
-# Configuración de CORS para que Flutter pueda comunicarse con la API
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -18,18 +17,16 @@ app.add_middleware(
 async def search_recipe(query: str):
     api_key = os.environ.get("GROQ_API_KEY")
     if not api_key:
-        return {"title": "Error: API Key no configurada", "ingredients": [], "instructions": []}
+        return {"title": "Error: API Key faltante", "ingredients": [], "instructions": []}
 
     try:
         client = Groq(api_key=api_key)
-        
-        # PROMPT DE BLOQUEO: Obliga a la IA a rechazar lo que no sea comida
+        # Filtro estricto para evitar contenido no alimenticio
         prompt = (
-            f"ERES UN CHEF PROFESIONAL. "
-            f"Si el usuario pide algo que NO sea una receta de comida o bebida comestible (ejemplo: '{query}', jabón, detergente, objetos), "
-            f"responde UNICAMENTE con este JSON: "
-            f"{{'title': 'Error: Solo recetas de cocina', 'ingredients': [], 'instructions': [], 'time': 'N/A', 'difficulty': 'N/A'}}. "
-            f"Si es comida, genera la receta de {query} en JSON con los campos: title, time, difficulty, ingredients (lista), instructions (lista)."
+            f"ERES UN CHEF. Si '{query}' NO es comida o bebida comestible, "
+            f"responde solo: {{'title': 'Error: Solo comida', 'ingredients': [], 'instructions': [], 'time': '0', 'difficulty': 'N/A'}}. "
+            f"Si es comida, genera la receta de {query} en JSON con los campos: "
+            f"title, time, difficulty, ingredients (lista), instructions (lista)."
         )
         
         completion = client.chat.completions.create(
@@ -37,10 +34,9 @@ async def search_recipe(query: str):
             messages=[{"role": "user", "content": prompt}],
             response_format={"type": "json_object"}
         )
-        
         return json.loads(completion.choices[0].message.content)
     except Exception as e:
-        return {"title": "Error de IA", "detalle": str(e), "ingredients": [], "instructions": []}
+        return {"title": "Error de conexión", "detalle": str(e)}
 
 if __name__ == "__main__":
     import uvicorn
