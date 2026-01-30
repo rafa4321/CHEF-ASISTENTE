@@ -16,24 +16,23 @@ app.add_middleware(
 @app.get("/search")
 async def search_recipe(query: str):
     api_key = os.environ.get("GROQ_API_KEY")
-    
     if not api_key:
         return {"title": "Error: Llave no configurada", "ingredients": [], "instructions": []}
 
     try:
         client = Groq(api_key=api_key)
         
-        # System Prompt estricto para cumplimiento de contenido gastronómico
+        # PROMPT DE SEGURIDAD ALIMENTARIA REFORZADO
         prompt = (
-            f"Eres un Chef de alta cocina. Si el usuario solicita algo que NO sea una receta de comida o bebida "
-            f"(ejemplo: '{query}'), responde obligatoriamente con este JSON: "
+            f"ERES UN CHEF PROFESIONAL. Tu tarea es generar recetas. "
+            f"REGLA CRÍTICA: Si el usuario pide algo que NO sea comida o bebida (ejemplo: '{query}', jabón, detergente, etc.), "
+            f"debes responder EXACTAMENTE con este JSON: "
             f"{{'title': 'Error: Solo recetas de cocina', 'ingredients': [], 'instructions': [], 'time': 'N/A', 'difficulty': 'N/A'}}. "
-            f"Si es un alimento, genera una receta de {query} en JSON con: "
-            f"title, time, difficulty, ingredients (lista), instructions (lista)."
+            f"Si es comida, genera la receta de {query} en JSON con: title, time, difficulty, ingredients (lista), instructions (lista)."
         )
         
         completion = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
+            model="llama-3.3-70b-versatile", # Modelo de alto rendimiento
             messages=[{"role": "user", "content": prompt}],
             response_format={"type": "json_object"}
         )
