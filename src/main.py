@@ -6,7 +6,6 @@ from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
 
-# Esto es vital para que Flutter no se bloquee
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -14,24 +13,32 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 1. Ruta de prueba raíz (Para verificar si el servidor responde)
-@app.get("/")
-def read_root():
-    return {"status": "Servidor Chef Asistente Activo"}
+# PON AQUÍ TU LLAVE REAL DE SEGMIND
+SEGMIND_API_KEY = "SG_TU_API_KEY_AQUI"
 
-# 2. Ruta de búsqueda (La que Flutter necesita)
 @app.get("/search")
 def search(query: str = Query(...)):
+    # Aquí puedes poner tus recetas reales o una base de datos
     return {
-        "title": f"Deliciosa Receta de {query}",
-        "ingredients": ["Ingrediente de prueba 1", "Ingrediente de prueba 2"],
-        "instructions": "Mezclar todo y disfrutar."
+        "title": f"Pizza {query.capitalize()} Gourmet",
+        "ingredients": ["300g de harina", "200ml de agua", "Queso mozzarella", "Salsa de tomate"],
+        "instructions": "1. Preparar la masa. 2. Añadir ingredientes. 3. Hornear 15 min."
     }
 
-# 3. Ruta para la imagen (Provisional para pruebas)
 @app.get("/generate-image")
 def generate_image(prompt: str = Query(...)):
-    return {"image": "base64_provisional_aqui"}
+    url = "https://api.segmind.com/v1/flux-schnell"
+    payload = {
+        "prompt": f"Professional food photography of {prompt}, gourmet style, 8k, studio lighting",
+        "steps": 20
+    }
+    headers = {"x-api-key": SEGMIND_API_KEY, "Content-Type": "application/json"}
+    
+    response = requests.post(url, json=payload, headers=headers)
+    if response.status_code == 200:
+        # Esto envía la imagen REAL en lugar del texto de error
+        return {"image": base64.b64encode(response.content).decode('utf-8')}
+    return {"error": "Fallo en IA"}, 500
 
 
 SEGMIND_API_KEY = "SG_c687338eb444bfb6" # Reemplaza con tu llave real
