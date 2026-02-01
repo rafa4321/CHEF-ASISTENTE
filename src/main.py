@@ -6,13 +6,30 @@ from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
 
-# Abre el paso a Flutter Web para evitar bloqueos
+# Permite que Flutter se comunique con el servidor
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.get("/")
+def read_root():
+    return {"message": "Servidor Chef Asistente Activo"}
+
+@app.get("/search")
+def search(query: str = Query(...)):
+    # Esta es la ruta que Flutter está buscando
+    return {
+        "title": f"Receta de {query}",
+        "ingredients": ["Ingrediente 1", "Ingrediente 2"]
+    }
+
+@app.get("/generate-image")
+def generate_image(prompt: str = Query(...)):
+    # Aquí irá la lógica de Segmind más adelante
+    return {"image": "base64_provisional"}
 
 SEGMIND_API_KEY = "SG_c687338eb444bfb6" # Reemplaza con tu llave real
 
