@@ -1,11 +1,12 @@
 import os
-import json
-from fastapi import FastAPI
+import base64
+import requests
+from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
-from groq import Groq
 
 app = FastAPI()
 
+# Configuración de CORS: Vital para que Flutter Web no de error
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -13,25 +14,34 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-@app.get("/search")
-async def search_recipe(query: str):
-    api_key = os.environ.get("GROQ_API_KEY")
-    client = Groq(api_key=api_key)
-    
-    # EL FILTRO MAESTRO: Bloqueo explícito de no-comida
-    prompt = (
-        f"Eres un Chef. Si '{query}' no es un alimento o bebida para humanos, "
-        f"responde estrictamente: {{\"title\": \"ERROR: SOLO COMIDA\", \"ingredients\": [], \"instructions\": []}}. "
-        f"Si es comida, genera la receta de {query} en JSON con title, ingredients, instructions, time y difficulty."
-    )
-    
-    completion = client.chat.completions.create(
-        model="llama-3.3-70b-versatile",
-        messages=[{"role": "user", "content": prompt}],
-        response_format={"type": "json_object"}
-    )
-    return json.loads(completion.choices[0].message.content)
+# REEMPLAZA CON TU LLAVE DE SEGMIND
+SEGMIND_API_KEY = "SG_c687338eb444bfb6" 
 
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
+@app.get("/")
+def home():
+    return {"status": "Chef Asistente API Corriendo"}
+
+@app.get("/generate-image")
+def generate_image(prompt: str = Query(...)):
+    url = "https://api.segmind.com/v1/flux-schnell"
+    
+    # Prompt técnico para evitar waffles y asegurar fotos gourmet
+    payload = {
+        "prompt": f"Professional gourmet food photography of {prompt}, 8k, studio lighting, elegant plating",
+        "steps": 20,
+        "seed": 12345
+    }
+    headers = {
+        "x-api-key": SEGMIND_API_KEY,
+        "Content-Type": "application/json"
+    }
+    
+    try:
+        response = requests.post(url, json=payload, headers=headers)
+        if response.status_code == 200:
+            # Convertimos la imagen binaria a Base64
+            encoded_image = base64.b64encode(response.content).decode('utf-8')
+            return {"image_base64": encoded_image}
+        return {"error": "Error en Segmind", "details": response.text}, response.status_code
+    except Exception as e:
+        return {"error": str(e)}, 500
