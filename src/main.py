@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
 
-# Permite que Flutter se comunique con el servidor
+# Esto es vital para que Flutter no se bloquee
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -14,22 +14,25 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# 1. Ruta de prueba raíz (Para verificar si el servidor responde)
 @app.get("/")
 def read_root():
-    return {"message": "Servidor Chef Asistente Activo"}
+    return {"status": "Servidor Chef Asistente Activo"}
 
+# 2. Ruta de búsqueda (La que Flutter necesita)
 @app.get("/search")
 def search(query: str = Query(...)):
-    # Esta es la ruta que Flutter está buscando
     return {
-        "title": f"Receta de {query}",
-        "ingredients": ["Ingrediente 1", "Ingrediente 2"]
+        "title": f"Deliciosa Receta de {query}",
+        "ingredients": ["Ingrediente de prueba 1", "Ingrediente de prueba 2"],
+        "instructions": "Mezclar todo y disfrutar."
     }
 
+# 3. Ruta para la imagen (Provisional para pruebas)
 @app.get("/generate-image")
 def generate_image(prompt: str = Query(...)):
-    # Aquí irá la lógica de Segmind más adelante
-    return {"image": "base64_provisional"}
+    return {"image": "base64_provisional_aqui"}
+
 
 SEGMIND_API_KEY = "SG_c687338eb444bfb6" # Reemplaza con tu llave real
 
