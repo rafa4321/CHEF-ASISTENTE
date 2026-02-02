@@ -6,6 +6,7 @@ from groq import Groq
 app = FastAPI()
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
+# Cliente de Groq
 client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
 @app.get("/search")
@@ -13,7 +14,10 @@ def get_recipe(query: str = Query(...)):
     try:
         completion = client.chat.completions.create(
             messages=[
-                {"role": "system", "content": "Eres un Chef Gourmet. Si el usuario pide algo que NO sea comida, responde: {'error': 'Lo siento, solo cocino comida real.'}. Si es comida, devuelve JSON con: title, ingredients (lista), instructions."},
+                {
+                    "role": "system", 
+                    "content": "Eres un Chef Gourmet. Si el usuario pide algo que NO es comida, responde: {'error': 'Lo siento, solo cocino comida real.'}. Si es comida, devuelve JSON con: title, ingredients (lista), instructions (texto)."
+                },
                 {"role": "user", "content": f"Receta de {query}"}
             ],
             model="llama-3.3-70b-versatile",
@@ -31,7 +35,7 @@ def generate_image(prompt: str = Query(...)):
     try:
         res = requests.post(url, json=payload, headers=headers)
         if res.status_code == 200:
-            # LIMPIEZA MILITAR: Eliminamos cualquier carácter extraño del Base64
+            # LIMPIEZA: Eliminamos saltos de línea para que Flutter no se rompa
             img_str = base64.b64encode(res.content).decode('utf-8').replace('\n', '').replace('\r', '')
             return {"image": img_str}
         return {"error": "API Error"}
