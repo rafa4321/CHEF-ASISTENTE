@@ -13,13 +13,7 @@ def get_recipe(query: str = Query(...)):
     try:
         completion = client.chat.completions.create(
             messages=[
-                {
-                    "role": "system", 
-                    "content": """Eres un Chef Profesional. 
-                    1. Si el usuario pide algo que NO es comida, responde: {"error": "Solo puedo dar recetas de cocina"}.
-                    2. Si es comida, responde SIEMPRE un JSON con: {"title": "...", "ingredients": [], "instructions": "..."}.
-                    3. No uses listas externas, solo un objeto JSON directo."""
-                },
+                {"role": "system", "content": "Eres un Chef Gourmet. Si el usuario pide algo que NO sea comida, responde: {'error': 'Lo siento, solo cocino comida real.'}. Si es comida, devuelve JSON con: title, ingredients (lista), instructions."},
                 {"role": "user", "content": f"Receta de {query}"}
             ],
             model="llama-3.3-70b-versatile",
@@ -33,11 +27,13 @@ def get_recipe(query: str = Query(...)):
 def generate_image(prompt: str = Query(...)):
     url = "https://api.segmind.com/v1/flux-schnell"
     headers = {"x-api-key": os.getenv("SEGMIND_API_KEY"), "Content-Type": "application/json"}
-    payload = {"prompt": f"Professional food photography of {prompt}, award winning plating, 8k", "steps": 20}
+    payload = {"prompt": f"Professional food photography of {prompt}, cinematic lighting, 8k", "steps": 20}
     try:
         res = requests.post(url, json=payload, headers=headers)
         if res.status_code == 200:
-            return {"image": base64.b64encode(res.content).decode('utf-8')}
-        return {"error": "API Image Error"}
+            # LIMPIEZA MILITAR: Eliminamos cualquier carácter extraño del Base64
+            img_str = base64.b64encode(res.content).decode('utf-8').replace('\n', '').replace('\r', '')
+            return {"image": img_str}
+        return {"error": "API Error"}
     except Exception as e:
         return {"error": str(e)}
