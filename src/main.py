@@ -33,7 +33,7 @@ def get_recipe(query: str = Query(...)):
                 {"role": "system", "content": "Eres un chef Michelin. Devuelve JSON: {'title': '', 'ingredients': [], 'instructions': ''}"},
                 {"role": "user", "content": f"Receta de {query}"}
             ],
-            model="llama3-8b-8192",
+            model="llama-3.3-70b-versatile",
             response_format={"type": "json_object"}
         )
         return json.loads(chat_completion.choices[0].message.content)
