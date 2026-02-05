@@ -1,11 +1,11 @@
-import os, base64, requests, json
+import os, json
 from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
 from groq import Groq
 
 app = FastAPI()
 
-# Esto permite que tu aplicación Flutter (Frontend) hable con Render (Backend)
+# Permite que Flutter se conecte sin bloqueos
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -13,7 +13,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Configuración de Groq para la receta
+# Configuración de Groq
 client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
 @app.get("/search")
@@ -23,7 +23,7 @@ def get_recipe(query: str = Query(...)):
             messages=[
                 {
                     "role": "system", 
-                    "content": "Eres un Chef. Responde SOLO con un JSON: {'title': str, 'ingredients': list, 'instructions': str}."
+                    "content": "Eres un Chef experto. Responde SOLO con un JSON: {'title': str, 'ingredients': list, 'instructions': str}."
                 },
                 {"role": "user", "content": f"Receta de {query}"}
             ],
@@ -34,12 +34,7 @@ def get_recipe(query: str = Query(...)):
     except Exception as e:
         return {"error": str(e)}
 
-# Este endpoint ahora es opcional porque Flutter cargará la imagen directo,
-# pero lo dejamos para que el servidor no dé error si Flutter lo llama.
-@app.get("/generate-image")
-def generate_image(prompt: str = Query(...)):
-    return {"status": "ok", "message": "Cargando desde el frontend"}
-
 if __name__ == "__main__":
     import uvicorn
+    # Render usa el puerto 10000 por defecto
     uvicorn.run(app, host="0.0.0.0", port=10000)
