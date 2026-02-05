@@ -25,7 +25,7 @@ def get_recipe(query: str = Query(...)):
 
 @app.get("/generate-image")
 def generate_image(prompt: str = Query(...)):
-    url = "https://api.segmind.com/v1/flux-schnell"
+    url = "https://api.segmind.com/v1/fast-flux-schnell"
     headers = {"x-api-key": os.getenv("SEGMIND_API_KEY"), "Content-Type": "application/json"}
     payload = {"prompt": f"Professional food photo of {prompt}, high resolution, cinematic lighting", "steps": 20}
     try:
