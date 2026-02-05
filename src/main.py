@@ -5,7 +5,7 @@ from groq import Groq
 
 app = FastAPI()
 
-# Configuración de CORS para permitir que Flutter Web se comunique sin bloqueos
+# Configuración de seguridad para que Flutter pueda conectarse
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -13,6 +13,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Cliente para el texto (Groq)
 client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
 @app.get("/search")
@@ -20,31 +21,25 @@ def get_recipe(query: str = Query(...)):
     try:
         completion = client.chat.completions.create(
             messages=[
-                {
-                    "role": "system", 
-                    "content": "Eres un Chef experto. Responde ÚNICAMENTE con un objeto JSON plano que contenga: 'title' (string), 'ingredients' (lista de strings) e 'instructions' (string). No agregues texto fuera del JSON."
-                },
-                {"role": "user", "content": f"Receta detallada de {query}"}
+                {"role": "system", "content": "Eres un Chef experto. Responde solo con JSON: {'title': str, 'ingredients': list, 'instructions': str}"},
+                {"role": "user", "content": f"Receta de {query}"}
             ],
             model="llama-3.3-70b-versatile",
             response_format={"type": "json_object"}
         )
         return json.loads(completion.choices[0].message.content)
     except Exception as e:
-        return {"error": f"Error en Groq: {str(e)}"}
+        return {"error": str(e)}
 
 @app.get("/generate-image")
 def generate_image(prompt: str = Query(...)):
     try:
-        # Usamos Pollinations con parámetros de limpieza (nologo=true)
-        # Esto evita que se generen formatos extraños que rompan el Codec de Flutter
-        clean_prompt = prompt.replace(" ", "%20")
-        url = f"https://pollinations.ai/p/{clean_prompt}?width=1024&height=1024&seed=42&model=flux&nologo=true"
-        
+        # Usamos Pollinations: Es gratis y no requiere API KEY
+        url = f"https://pollinations.ai/p/{prompt.replace(' ', '%20')}?width=1024&height=1024&nologo=true"
         res = requests.get(url, timeout=30)
         
         if res.status_code == 200:
-            # Convertimos la imagen binaria en una cadena Base64 limpia
+            # Convertimos la imagen a un código que Flutter entiende (Base64)
             img_b64 = base64.b64encode(res.content).decode('utf-8')
             return {"image": img_b64}
         else:
@@ -54,4 +49,5 @@ def generate_image(prompt: str = Query(...)):
 
 if __name__ == "__main__":
     import uvicorn
+    # Render usa el puerto 10000 por defecto
     uvicorn.run(app, host="0.0.0.0", port=10000)
