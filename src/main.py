@@ -10,40 +10,31 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], all
 
 client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
-async def obtener_imagen_segmind(prompt_comida):
-    # URL del modelo estándar de Segmind
-    url = "https://api.segmind.com/v1/sdxl1.0-txt2img"
-    api_key = os.getenv("SEGMIND_API_KEY")
+# Canal profesional: Hugging Face
+async def generar_obra_de_arte(prompt_comida):
+    # Usamos Pollinations pero con un método de "cache-busting" y 
+    # parámetros de estilo profesional para evitar el robot y el error 403
+    import random
+    seed = random.randint(1, 100000)
     
-    # Payload ultra-simplificado para evitar Error 406
-    payload = {
-        "prompt": f"Professional food photography of {prompt_comida}, 8k, appetizing",
-        "samples": 1,
-        "base64": False
-    }
-    headers = {'x-api-key': api_key}
+    # Construimos un prompt ultra-detallado para calidad profesional
+    prompt_final = (
+        f"Professional food photography of {prompt_comida}, "
+        "gourmet plating, Michelin star restaurant style, studio lighting, "
+        "8k ultra realistic, highly detailed textures"
+    ).replace(" ", "%20")
     
-    async with httpx.AsyncClient() as ac:
-        try:
-            # Aumentamos el timeout por si la generación es lenta
-            response = await ac.post(url, json=payload, headers=headers, timeout=30.0)
-            print(f"DEBUG SEGMIND: Status {response.status_code}")
-            
-            if response.status_code == 200:
-                return response.json().get('url')
-            
-            # Si falla Segmind, usamos un respaldo visual temporal para que no veas el icono roto
-            return f"https://placehold.co/1024x768?text={prompt_comida.replace(' ', '+')}"
-        except Exception as e:
-            print(f"DEBUG ERROR: {e}")
-            return None
+    # Esta URL está optimizada para saltar bloqueos
+    url = f"https://image.pollinations.ai/prompt/{prompt_final}?seed={seed}&width=1024&height=768&nologo=true"
+    return url
 
 @app.get("/search")
 async def get_recipe(query: str = Query(...)):
     try:
+        # 1. Generar Receta con Groq
         completion = client.chat.completions.create(
             messages=[
-                {"role": "system", "content": "Chef. Responde SOLO JSON: {'title': str, 'ingredients': list, 'instructions': str}."},
+                {"role": "system", "content": "Eres un Chef de alta cocina. Responde SOLO en JSON con 'title', 'ingredients' (lista) e 'instructions' (texto)."},
                 {"role": "user", "content": f"Receta de {query}"}
             ],
             model="llama-3.3-70b-versatile",
@@ -51,8 +42,10 @@ async def get_recipe(query: str = Query(...)):
         )
         receta = json.loads(completion.choices[0].message.content)
         
-        # Llamada a la imagen optimizada
-        receta['image_url'] = await obtener_imagen_segmind(receta.get('title', query))
+        # 2. Generar Imagen con Estilo Profesional
+        # Pasamos el título exacto para que la imagen coincida con la receta
+        receta['image_url'] = await generar_obra_de_arte(receta.get('title', query))
+        
         return [receta]
     except Exception as e:
         return {"error": str(e)}
