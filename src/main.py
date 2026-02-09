@@ -1,13 +1,12 @@
 import os
 import json
-import requests
 from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
 from groq import Groq
 
 app = FastAPI()
 
-# Configuración CORS para que Flutter no tenga bloqueos
+# Configuración CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -15,26 +14,20 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Inicializar cliente de Groq
+# Inicializar Groq
 client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
 @app.get("/search")
 def get_recipe(query: str = Query(...)):
     try:
-        # 1. SOLICITUD A GROQ: Forzamos receta fidedigna por componentes
+        # 1. Groq genera la receta fidedigna
         completion = client.chat.completions.create(
             messages=[
                 {
                     "role": "system", 
                     "content": """Eres un Chef de alta cocina. 
-                    Responde SOLO en JSON con esta estructura: 
-                    {
-                      'title': str, 
-                      'ingredients': list, 
-                      'instructions': str
-                    }
-                    IMPORTANTE: En 'instructions', separa la preparación por componentes (ej: Carne, Arroz, Porotos). 
-                    NUNCA indiques mezclar los ingredientes si el plato se sirve por porciones separadas."""
+                    Responde SOLO en JSON: {'title': str, 'ingredients': list, 'instructions': str}.
+                    IMPORTANTE: No mezcles ingredientes que se sirven por separado."""
                 },
                 {"role": "user", "content": f"Receta profesional de {query}"}
             ],
@@ -42,20 +35,19 @@ def get_recipe(query: str = Query(...)):
             response_format={"type": "json_object"}
         )
         
-        # Convertimos la respuesta de texto a un objeto JSON de Python
         receta = json.loads(completion.choices[0].message.content)
-        titulo_limpio = receta.get('title', query)
+        titulo = receta.get('title', query)
 
-        # 2. GENERACIÓN DE LA OBRA DE ARTE (Imagen Gourmet)
-        # Usamos un generador dinámico de alta calidad basado en el título de la receta
-        # Esto asegura que si buscas 'Pabellón', la imagen sea de un Pabellón Gourmet
-        prompt_foto = f"professional_food_photography_of_{titulo_limpio.replace(' ', '_')}_gourmet_plating_studio_lighting_8k_highly_detailed"
+        # 2. LIMPIEZA PARA POLLINATIONS (La clave del éxito)
+        # Reemplazamos espacios por guiones y quitamos acentos para evitar el 'robot'
+        prompt_limpio = titulo.replace(" ", "-").replace("á", "a").replace("é", "e").replace("í", "i").replace("ó", "o").replace("ú", "u").replace("ñ", "n")
         
-        # Esta URL genera la imagen en tiempo real para tu App
-        receta['image_url'] = f"https://image.pollinations.ai/prompt/{prompt_foto}?width=1024&height=768&nologo=true"
+        # Construimos la URL de Pollinations forzando estilo fotográfico gourmet
+        url_imagen = f"https://image.pollinations.ai/prompt/gourmet-food-photography-of-{prompt_limpio}-plated-luxury-restaurant-style-8k?width=1024&height=1024&nologo=true&enhance=true"
+        
+        receta['image_url'] = url_imagen
 
-        # 3. ENVIAR TODO A FLUTTER
-        return [receta] # Lo enviamos dentro de una lista para que el ListView de Flutter lo lea bien
+        return [receta] # Enviamos lista para que Flutter no falle
 
     except Exception as e:
         return {"error": str(e)}
