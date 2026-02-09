@@ -1,12 +1,13 @@
 import os
 import json
+import unicodedata
 from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
 from groq import Groq
 
 app = FastAPI()
 
-# Configuración CORS
+# Configuración CORS para evitar bloqueos en el navegador
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -14,22 +15,26 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Inicializar Groq
 client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+
+def limpiar_texto_para_url(texto):
+    """Elimina tildes, eñes y espacios para que Pollinations no falle"""
+    # Normaliza para quitar tildes (ej: 'ó' -> 'o')
+    texto = "".join(c for c in unicodedata.normalize('NFD', texto)
+                  if unicodedata.category(c) != 'Mn')
+    # Reemplaza espacios por guiones y quita caracteres especiales
+    return texto.replace(" ", "-").replace("ñ", "n").replace("Ñ", "N").lower()
 
 @app.get("/search")
 def get_recipe(query: str = Query(...)):
     try:
-        # 1. Groq genera la receta fidedigna
         completion = client.chat.completions.create(
             messages=[
                 {
                     "role": "system", 
-                    "content": """Eres un Chef de alta cocina. 
-                    Responde SOLO en JSON: {'title': str, 'ingredients': list, 'instructions': str}.
-                    IMPORTANTE: No mezcles ingredientes que se sirven por separado."""
+                    "content": "Eres un Chef experto. Responde SOLO con un JSON: {'title': str, 'ingredients': list, 'instructions': str}."
                 },
-                {"role": "user", "content": f"Receta profesional de {query}"}
+                {"role": "user", "content": f"Receta de {query}"}
             ],
             model="llama-3.3-70b-versatile",
             response_format={"type": "json_object"}
@@ -38,16 +43,15 @@ def get_recipe(query: str = Query(...)):
         receta = json.loads(completion.choices[0].message.content)
         titulo = receta.get('title', query)
 
-        # 2. LIMPIEZA PARA POLLINATIONS (La clave del éxito)
-        # Reemplazamos espacios por guiones y quitamos acentos para evitar el 'robot'
-        prompt_limpio = titulo.replace(" ", "-").replace("á", "a").replace("é", "e").replace("í", "i").replace("ó", "o").replace("ú", "u").replace("ñ", "n")
+        # Preparamos el prompt para Pollinations
+        prompt_limpio = limpiar_texto_para_url(titulo)
         
-        # Construimos la URL de Pollinations forzando estilo fotográfico gourmet
-        url_imagen = f"https://image.pollinations.ai/prompt/gourmet-food-photography-of-{prompt_limpio}-plated-luxury-restaurant-style-8k?width=1024&height=1024&nologo=true&enhance=true"
-        
-        receta['image_url'] = url_imagen
+        # Forzamos estilo de fotografía gastronómica de lujo
+        url_base = "https://image.pollinations.ai/prompt/"
+        estilo = "gourmet-food-photography-plated-luxury-restaurant-style-8k"
+        receta['image_url'] = f"{url_base}{prompt_limpio}-{estilo}?width=1024&height=1024&nologo=true&enhance=true"
 
-        return [receta] # Enviamos lista para que Flutter no falle
+        return [receta] # Enviamos lista para compatibilidad con el ListView
 
     except Exception as e:
         return {"error": str(e)}
