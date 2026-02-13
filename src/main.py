@@ -9,7 +9,7 @@ from groq import Groq
 
 app = FastAPI()
 
-# Configuración de CORS para que tu App de Flutter pueda comunicarse sin bloqueos
+# Configuración de CORS profesional
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -22,45 +22,50 @@ client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
 async def generar_imagen_profesional(prompt_comida):
     """
-    Genera una imagen usando Hugging Face y la convierte a Base64.
-    Esto evita errores 403 (Forbidden) y 406.
+    Genera imagen con Hugging Face. Si falla, usa un respaldo de comida real.
     """
-    # Usamos el modelo Stable Diffusion XL para calidad fotográfica
-    api_url = "https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-xl-base-1.0"
+    # Modelo altamente disponible y estable
+    api_url = "https://api-inference.huggingface.co/models/runwayml/stable-diffusion-v1-5"
     token = os.getenv("HF_TOKEN")
     
     headers = {"Authorization": f"Bearer {token}"}
     payload = {
-        "inputs": f"Gourmet food photography, professional plating of {prompt_comida}, michelin star style, 8k resolution, highly detailed, studio lighting",
-        "options": {"wait_for_model": True}
+        "inputs": f"Professional food photo, {prompt_comida}, gourmet presentation, studio lighting, 4k",
+        "options": {"wait_for_model": True} 
     }
 
     async with httpx.AsyncClient() as ac:
         try:
-            # Damos 40 segundos de margen porque la IA de imagen es lenta
-            response = await ac.post(api_url, headers=headers, json=payload, timeout=40.0)
+            # Intentar hasta 2 veces si el modelo está cargando
+            for intento in range(2):
+                response = await ac.post(api_url, headers=headers, json=payload, timeout=35.0)
+                
+                if response.status_code == 200:
+                    img_str = base64.b64encode(response.content).decode('utf-8')
+                    return f"data:image/jpeg;base64,{img_str}"
+                
+                elif response.status_code == 503: # Modelo despertando
+                    await asyncio.sleep(10)
+                    continue
+                else:
+                    break
             
-            if response.status_code == 200:
-                # Convertimos el binario de la imagen a texto Base64
-                img_str = base64.b64encode(response.content).decode('utf-8')
-                return f"data:image/jpeg;base64,{img_str}"
-            else:
-                print(f"Error HF Status: {response.status_code}")
-                # Si falla, devolvemos un color sólido elegante con el nombre del plato
-                return f"https://ui-avatars.com/api/?name={prompt_comida}&size=512&background=random"
+            # RESPALDO DE COMIDA REAL (Si la IA falla, esto siempre funciona)
+            return f"https://loremflickr.com/800/600/food,{prompt_comida.replace(' ', '')}/all"
+
         except Exception as e:
-            print(f"Error en generador: {e}")
-            return None
+            print(f"Error Generador: {e}")
+            return f"https://ui-avatars.com/api/?name={prompt_comida}&size=512"
 
 @app.get("/search")
 async def get_recipe(query: str = Query(...)):
     try:
-        # 1. Generar la receta con Groq
+        # 1. Generar receta con Groq
         chat_completion = client.chat.completions.create(
             messages=[
                 {
                     "role": "system", 
-                    "content": "Eres un Chef profesional. Responde únicamente en formato JSON con esta estructura: {'title': 'nombre', 'ingredients': ['lista'], 'instructions': 'texto paso a paso'}."
+                    "content": "Eres un Chef Gourmet. Responde SOLO JSON: {'title': str, 'ingredients': list, 'instructions': str}."
                 },
                 {"role": "user", "content": f"Receta de {query}"}
             ],
@@ -70,15 +75,13 @@ async def get_recipe(query: str = Query(...)):
         
         receta = json.loads(chat_completion.choices[0].message.content)
         
-        # 2. Generar la imagen (esperamos a que se cocine la IA)
-        nombre_plato = receta.get('title', query)
-        receta['image_url'] = await generar_imagen_profesional(nombre_plato)
+        # 2. Generar imagen (IA o Respaldo)
+        receta['image_url'] = await generar_imagen_profesional(receta.get('title', query))
         
-        # Devolvemos una lista como espera tu App de Flutter
         return [receta]
         
     except Exception as e:
-        print(f"Error General: {e}")
+        print(f"Error en servidor: {e}")
         return {"error": str(e)}
 
 if __name__ == "__main__":
