@@ -9,7 +9,6 @@ from groq import Groq
 
 app = FastAPI()
 
-# Configuración de CORS para que Flutter Web y Mobile no tengan bloqueos
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -17,75 +16,72 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Inicialización de Groq
 client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
 async def generar_imagen_ia(prompt_comida):
-    """
-    Genera una imagen con estilo 'Vibrante Editorial'.
-    Usa el nuevo Router de Hugging Face para evitar el error 410.
-    """
-    # URL ACTUALIZADA (Router estable)
+    # Usamos el router actualizado para evitar el error 410
     api_url = "https://router.huggingface.co/hf-inference/models/stabilityai/stable-diffusion-xl-base-1.0"
     token = os.getenv("HF_TOKEN")
     
     headers = {"Authorization": f"Bearer {token}"}
     
-    # PROMPT DE ESTILO VIBRANTE PROFESIONAL
-    prompt_estilizado = (
-        f"Professional food photography of {prompt_comida}, vibrant colors, "
-        "high saturation, macro lens, bright natural lighting, bokeh background, "
-        "highly detailed textures, appetizing, 8k resolution, commercial food styling"
+    # PROMPT DE REALISMO ESTRICTO
+    # Enfocado en texturas reales, vapor y fotografía de restaurante real.
+    prompt_final = (
+        f"Hyper-realistic professional photography of {prompt_comida}, "
+        "authentic traditional dish, 8k dslr, cinematic lighting, "
+        "detailed food textures, natural colors, steam, restaurant table setting, "
+        "sharp focus, appetizing real food"
     )
     
     payload = {
-        "inputs": prompt_estilizado,
+        "inputs": prompt_final,
         "parameters": {
-            "negative_prompt": "dark, gloomy, blurry, low contrast, distorted, plastic, gray, dull, low quality",
-            "guidance_scale": 9.0  # Mayor fidelidad al estilo vibrante
+            # El Negative Prompt bloquea lo que vimos en tu captura (colores rosados, formas de dona)
+            "negative_prompt": (
+                "pink, purple, neon, donut, circle, abstract, surreal, "
+                "cartoon, anime, drawing, blurry, low quality, deformed food, "
+                "plastic texture, artistic, conceptual"
+            ),
+            "guidance_scale": 7.0, # Balance perfecto entre seguir el texto y realismo
+            "num_inference_steps": 35
         },
         "options": {"wait_for_model": True, "use_cache": False}
     }
 
     async with httpx.AsyncClient() as ac:
-        # AGOTAMOS LOS BUCLES: 3 intentos de 60 segundos cada uno
         for intento in range(3):
             try:
-                print(f"--- Intento {intento + 1}: Generando imagen vibrante para {prompt_comida} ---")
+                print(f"--- Intento {intento + 1}: Generando foto REALISTA para {prompt_comida} ---")
                 response = await ac.post(api_url, headers=headers, json=payload, timeout=60.0)
                 
                 if response.status_code == 200:
-                    print("✅ ÉXITO: Imagen IA generada correctamente")
                     img_str = base64.b64encode(response.content).decode('utf-8')
                     return f"data:image/jpeg;base64,{img_str}"
                 
                 elif response.status_code == 503:
-                    print(f"⏳ IA cargando (503). Reintentando en 15s...")
                     await asyncio.sleep(15)
                     continue
                 else:
-                    print(f"❌ Error de HF: {response.status_code} - {response.text}")
+                    print(f"Error HF: {response.status_code}")
                     break
-                    
             except Exception as e:
-                print(f"⚠️ Excepción en generación de imagen: {str(e)}")
-                await asyncio.sleep(2)
+                print(f"Error: {e}")
         
-        # SI LA IA FALLA TRAS 3 INTENTOS: Respaldo de comida real (No gatos)
-        print("🚀 Usando respaldo visual de LoremFlickr")
+        # Respaldo visual de comida real si la IA falla
         return f"https://loremflickr.com/800/600/food,{prompt_comida.replace(' ', '')}/all"
 
 @app.get("/search")
 async def get_recipe(query: str = Query(...)):
     try:
-        # 1. Generar la receta con Groq (Modelo Llama 3.3)
+        # Groq genera la receta detallada
         completion = client.chat.completions.create(
             messages=[
                 {
                     "role": "system", 
-                    "content": "Eres un Chef experto en nutrición. Responde SOLO con un objeto JSON en español: {'title': str, 'ingredients': list, 'instructions': str}."
+                    "content": "Eres un Chef especializado en cocina tradicional. Responde SOLO JSON en español: {'title': str, 'ingredients': list, 'instructions': str}."
                 },
-                {"role": "user", "content": f"Dame una receta deliciosa y colorida de {query}"}
+                {"role": "user", "content": f"Receta tradicional de {query}"}
             ],
             model="llama-3.3-70b-versatile",
             response_format={"type": "json_object"}
@@ -93,18 +89,16 @@ async def get_recipe(query: str = Query(...)):
         
         receta = json.loads(completion.choices[0].message.content)
         
-        # 2. Generar la imagen vibrante
-        nombre_plato = receta.get('title', query)
-        receta['image_url'] = await generar_imagen_ia(nombre_plato)
+        # Generamos la imagen basada en el título real de la receta
+        receta['image_url'] = await generar_imagen_ia(receta.get('title', query))
         
         return [receta]
         
     except Exception as e:
-        print(f"🔥 ERROR CRÍTICO: {e}")
-        return [{"error": "No se pudo procesar la receta", "details": str(e)}]
+        print(f"Error: {e}")
+        return [{"error": str(e)}]
 
 if __name__ == "__main__":
     import uvicorn
-    # Render asigna el puerto automáticamente
     port = int(os.environ.get("PORT", 10000))
     uvicorn.run(app, host="0.0.0.0", port=port)
