@@ -1,7 +1,6 @@
 import os
 import json
 import httpx
-import base64
 from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
 from groq import Groq
@@ -18,39 +17,33 @@ app.add_middleware(
 client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
 @app.get("/search")
-async def verify_step_1(query: str = Query(...)):
+async def get_recipe_fixed(query: str = Query(...)):
     try:
-        # Instrucción de precisión absoluta
         system_prompt = """
-        Eres un Chef Profesional. Responde ÚNICAMENTE con un JSON válido.
-        ESTRUCTURA REQUERIDA (NO FALLAR):
+        Eres un Chef Pro. Responde ÚNICAMENTE en JSON con esta estructura exacta:
         {
-          "title": "Nombre del plato",
-          "description": "Descripción breve",
-          "ingredients": ["lista", "de", "strings"],
-          "steps": ["paso 1", "paso 2", "paso 3"],
-          "nutrition": {"calories": "0", "protein": "0g", "carbs": "0g", "fat": "0g"}
+          "title": "Nombre del Plato | Cal: 500 - Prot: 30g", 
+          "description": "Breve reseña",
+          "ingredients": ["1 taza de arroz", "2 huevos"],
+          "steps": ["Paso 1: Cocinar arroz", "Paso 2: Freír huevos"],
+          "image_url": "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=1000"
         }
+        Nota: Incluye la nutrición básica resumida directamente en el 'title' para que aparezca en la franja del nombre.
+        'steps' DEBE ser una lista de frases, NO un párrafo largo.
         """
+
         completion = client.chat.completions.create(
             messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": query}],
             model="llama-3.3-70b-versatile",
             response_format={"type": "json_object"}
         )
         
-        receta = json.loads(completion.choices[0].message.content)
+        data = json.loads(completion.choices[0].message.content)
         
-        # VALIDACIÓN MILIMÉTRICA: Si la IA falla, el código corrige el formato antes de enviar
-        if isinstance(receta.get('steps'), str): receta['steps'] = [receta['steps']]
-        if isinstance(receta.get('ingredients'), str): receta['ingredients'] = [receta['ingredients']]
-        
-        # Imagen de prueba (usaremos una fija para no gastar intentos de IA en este paso)
-        receta['image_url'] = "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=1000"
-        
-        return [receta]
+        # Forzar formato de lista para evitar el error de la imagen 8de5a7.jpg
+        if isinstance(data.get('steps'), str):
+            data['steps'] = [s.strip() for s in data['steps'].split('.') if s.strip()]
+            
+        return [data]
     except Exception as e:
         return [{"error": str(e)}]
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=10000)
