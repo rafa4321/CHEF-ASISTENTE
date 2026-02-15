@@ -8,69 +8,49 @@ from groq import Groq
 
 app = FastAPI()
 
-# Arreglamos el error de CORS (image_d69a23.png)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
-async def generar_imagen_elite(nombre_plato):
-    api_url = "https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-xl-base-1.0"
-    headers = {"Authorization": f"Bearer {os.getenv('HF_TOKEN')}"}
-    
-    # Prompt optimizado para realismo extremo (Paso 2)
-    prompt = f"Professional 8k food photography of {nombre_plato}, gourmet presentation, highly detailed, soft studio lighting, white background."
-    
-    try:
-        async with httpx.AsyncClient() as ac:
-            response = await ac.post(api_url, headers=headers, json={"inputs": prompt}, timeout=60.0)
-            if response.status_code == 200:
-                img_base64 = base64.b64encode(response.content).decode('utf-8')
-                return f"data:image/jpeg;base64,{img_base64}"
-    except:
-        pass
-    
-    # Fallback si falla el token (evita fotos rotas)
-    return "https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&q=80&w=1000"
-
 @app.get("/search")
-async def get_premium_recipe(query: str = Query(...)):
+async def verify_step_1(query: str = Query(...)):
     try:
+        # Instrucción de precisión absoluta
         system_prompt = """
-        Eres un Chef Michelin. Responde ÚNICAMENTE en JSON.
-        'ingredients' y 'steps' DEBEN SER LISTAS (no texto largo).
-        'nutrition' debe ser un objeto con cal, protein, carbs, fat.
+        Eres un Chef Profesional. Responde ÚNICAMENTE con un JSON válido.
+        ESTRUCTURA REQUERIDA (NO FALLAR):
+        {
+          "title": "Nombre del plato",
+          "description": "Descripción breve",
+          "ingredients": ["lista", "de", "strings"],
+          "steps": ["paso 1", "paso 2", "paso 3"],
+          "nutrition": {"calories": "0", "protein": "0g", "carbs": "0g", "fat": "0g"}
+        }
         """
-
         completion = client.chat.completions.create(
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": f"Receta profesional para: {query}"}
-            ],
+            messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": query}],
             model="llama-3.3-70b-versatile",
             response_format={"type": "json_object"}
         )
         
         receta = json.loads(completion.choices[0].message.content)
         
-        # Inyectamos la foto generada por IA
-        receta['image_url'] = await generar_imagen_elite(receta.get('title', query))
+        # VALIDACIÓN MILIMÉTRICA: Si la IA falla, el código corrige el formato antes de enviar
+        if isinstance(receta.get('steps'), str): receta['steps'] = [receta['steps']]
+        if isinstance(receta.get('ingredients'), str): receta['ingredients'] = [receta['ingredients']]
         
-        # Normalizamos nombres para tu Flutter (compatibilidad total)
-        resultado = {
-            "title": receta.get("title", query),
-            "description": receta.get("description", ""),
-            "ingredients": receta.get("ingredients", []),
-            "steps": receta.get("steps", []),
-            "nutrition": receta.get("nutrition", {})
-        }
+        # Imagen de prueba (usaremos una fija para no gastar intentos de IA en este paso)
+        receta['image_url'] = "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=1000"
         
-        return [resultado]
-        
+        return [receta]
     except Exception as e:
         return [{"error": str(e)}]
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=10000)
