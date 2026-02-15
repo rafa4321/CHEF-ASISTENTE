@@ -1,59 +1,69 @@
 import os
 import json
-import re
 from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
 from groq import Groq
 
 app = FastAPI()
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
-def limpiar_y_listar(datos):
-    """Convierte cualquier basura en una lista limpia de strings."""
-    if isinstance(datos, list): return [str(i).strip() for i in datos if i]
-    if isinstance(datos, str):
-        # Si es un texto largo, lo dividimos por puntos o números
-        pasos = re.split(r'\d+\.\s*|\.\s*(?=[A-Z])', datos)
-        return [p.strip() for p in pasos if len(p.strip()) > 5]
-    return []
-
 @app.get("/search")
-async def buscar_receta(query: str = Query(...)):
+async def buscar_receta_perfecta(query: str = Query(...)):
     try:
+        # Prompt de ingeniería de precisión: Forzamos idioma y estructura de lista
+        system_prompt = """
+        Eres un Chef Estrella Michelin. 
+        REGLA 1: Responde SIEMPRE en ESPAÑOL.
+        REGLA 2: La preparación NO puede ser un solo bloque de texto. 
+        REGLA 3: Debes separar cada instrucción en un elemento distinto de la lista.
+        FORMATO JSON REQUERIDO:
+        {
+          "nombre": "TITULO",
+          "kcal": "500 kcal",
+          "prote": "30g Prot",
+          "ingredientes": ["item 1", "item 2"],
+          "pasos": ["1. Primer paso", "2. Segundo paso", "3. Tercer paso"]
+        }
+        """
+
         completion = client.chat.completions.create(
-            messages=[{"role": "system", "content": "Chef JSON: title, calories, protein, ingredients (list), steps (list)."},
-                      {"role": "user", "content": query}],
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": f"Receta para: {query}"}
+            ],
             model="llama-3.3-70b-versatile",
             response_format={"type": "json_object"}
         )
         
-        res_ai = json.loads(completion.choices[0].message.content)
+        data = json.loads(completion.choices[0].message.content)
         
-        # 1. DISEÑO DE TÍTULO (Nombre + 'Caja' Nutricional a la derecha)
-        # Usamos caracteres de bloque para simular el rectángulo que pides
-        nombre = str(res_ai.get("title", query)).upper()
-        kcal = res_ai.get("calories", "---")
-        prot = res_ai.get("protein", "---")
-        
-        # Este formato empuja la info a la derecha si tu App usa una fuente monoespaciada o un contenedor ancho
-        caja_nutri = f" █ {kcal} Kcal | {prot} Prot █ "
-        titulo_final = f"{nombre:<25} {caja_nutri:>25}"
+        # --- Formateo de Título para tu App ---
+        nombre_plato = data.get("nombre", query).upper()
+        info_nutri = f"⚡ {data.get('kcal', '---')}  |  💪 {data.get('prote', '---')}"
+        titulo_final = f"{nombre_plato}         {info_nutri}"
 
-        # 2. PROCESAMIENTO RIGUROSO DE LISTAS
-        # Usamos nombres redundantes porque no sabemos cuál espera tu código Dart
-        ingredientes = limpiar_y_listar(res_ai.get("ingredients", []))
-        pasos = limpiar_y_listar(res_ai.get("steps", res_ai.get("preparation", [])))
+        # --- Extracción Segura de Listas ---
+        # Si la IA falla, enviamos una lista con un mensaje para que Flutter no se rompa
+        lista_ingredientes = data.get("ingredientes", ["No se cargaron ingredientes"])
+        lista_pasos = data.get("pasos", ["No se cargó la preparación"])
 
-        # 3. EL PUENTE (El JSON que no falla)
+        # --- El Puente de Datos (Lo que Flutter recibe) ---
         return [{
             "title": titulo_final,
-            "ingredients": ingredientes,
-            "preparation": pasos,  # Llave que suele usar Flutter
-            "steps": pasos,        # Llave alternativa
-            "description": "Receta optimizada para el sistema.",
+            "ingredients": lista_ingredientes,
+            "preparation": lista_pasos, # Flutter leerá esta lista de strings individuales
+            "steps": lista_pasos,       # Duplicado por si tu código busca 'steps'
+            "description": f"Receta profesional de {nombre_plato}",
             "image_url": "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=1000"
         }]
     except Exception as e:
-        return [{"title": "ERROR DE MAPEO", "preparation": [str(e)], "ingredients": []}]
+        # Si algo falla, devolvemos una estructura de lista para evitar la pantalla roja
+        return [{"title": "ERROR", "ingredients": [], "preparation": [str(e)]}]
