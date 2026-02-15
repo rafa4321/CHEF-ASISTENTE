@@ -16,16 +16,19 @@ app.add_middleware(
 client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
 @app.get("/search")
-async def get_recipe_final(query: str = Query(...)):
+async def get_recipe_fixed(query: str = Query(...)):
     try:
-        # Prompt ultra-estricto para evitar listas vacías
         system_prompt = """
-        Eres un Chef Estrella Michelin. Genera una receta detallada en JSON.
-        REGLAS DE ORO:
-        1. 'title': Nombre del plato en MAYÚSCULAS.
-        2. 'nutri': Texto con este formato: ⚡ 550 kcal  |  💪 35g Prot
-        3. 'ingredients': DEBE ser una lista de strings. No puede estar vacía.
-        4. 'steps': DEBE ser una lista de pasos numerados. No puede estar vacía.
+        Eres un Chef Pro. Responde SOLO en JSON.
+        ESTRUCTURA:
+        {
+          "nombre": "TITULO",
+          "kcal": "800 kcal",
+          "prot": "50g Prot",
+          "ingredientes": ["item 1", "item 2"],
+          "pasos": ["1. Paso uno", "2. Paso dos"]
+        }
+        IMPORTANTE: 'pasos' debe ser una LISTA de frases cortas, NO un párrafo.
         """
 
         completion = client.chat.completions.create(
@@ -36,27 +39,32 @@ async def get_recipe_final(query: str = Query(...)):
         
         data = json.loads(completion.choices[0].message.content)
         
-        # Extracción y limpieza de datos
-        nombre = data.get("title", query).upper()
-        info_nutri = data.get("nutri", "⚡ -- kcal | 💪 --g Prot")
-        
-        # Hack para el alineado a la derecha sin corchetes
-        # Usamos puntos invisibles o espacios para empujar el texto
-        titulo_final = f"{nombre}                                     {info_nutri}"
+        # --- DISEÑO DEL TÍTULO (Recuadro a la derecha) ---
+        # Usamos tabulaciones y espacios para empujar la info nutricional
+        nombre = data.get("nombre", query).upper()
+        nutricion = f"⚡ {data.get('kcal', '--')}  |  💪 {data.get('prot', '--')}"
+        # El título final llevará el nombre y la nutrición separada
+        titulo_final = f"{nombre}                                         {nutricion}"
 
-        ingredientes = data.get("ingredients", ["Error: No se cargaron ingredientes"])
-        pasos = data.get("steps", ["Error: No se cargó la preparación"])
+        # --- CORRECCIÓN DE LA PREPARACIÓN ---
+        # Forzamos que 'pasos' sea una lista real para que Flutter la pinte
+        raw_pasos = data.get("pasos", [])
+        if isinstance(raw_pasos, str):
+            # Si la IA manda texto, lo partimos por los puntos
+            pasos_finales = [p.strip() for p in raw_pasos.split('.') if len(p) > 5]
+        else:
+            pasos_finales = raw_pasos
 
-        # Retornamos el objeto con TODAS las etiquetas posibles que tu App pueda buscar
+        # Enviamos los nombres de variables que Flutter espera (redundancia total)
         resultado = {
             "title": titulo_final,
-            "description": data.get("description", ""),
-            "ingredients": ingredientes,
-            "preparation": pasos, # Para el widget de preparación
-            "steps": pasos,       # Por si acaso busca 'steps'
+            "ingredients": data.get("ingredientes", []),
+            "preparation": pasos_finales, # Etiqueta principal
+            "steps": pasos_finales,       # Etiqueta secundaria
+            "description": f"Receta de {nombre}",
             "image_url": "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=1000"
         }
         
         return [resultado]
     except Exception as e:
-        return [{"title": "ERROR DE CONEXIÓN", "ingredients": [], "preparation": [str(e)]}]
+        return [{"title": "ERROR", "preparation": [str(e)], "ingredients": []}]
