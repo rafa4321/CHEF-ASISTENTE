@@ -1,5 +1,7 @@
 import os
 import json
+import httpx
+import base64
 from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
 from groq import Groq
@@ -9,46 +11,44 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], all
 
 client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
-@app.get("/search")
-async def buscar_receta_detallada(query: str = Query(...)):
+async def generar_imagen_ia(plato):
+    """Genera imagen gourmet usando tu HF_TOKEN"""
+    api_url = "https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-xl-base-1.0"
+    headers = {"Authorization": f"Bearer {os.getenv('HF_TOKEN')}"}
+    prompt = f"Gourmet professional food photography of {plato}, elegant plating, 8k, highly detailed."
     try:
-        # Prompt de ALTA PRECISIÓN para evitar ambigüedades
-        system_prompt = """
-        Eres un Chef Profesional de alto nivel. Responde SIEMPRE en ESPAÑOL y en formato JSON.
-        
-        REGLAS DE ORO:
-        1. INGREDIENTES: Deben incluir cantidades exactas (ej: "500g de carne", "2 tazas de arroz", "1 pizca de sal"). No acepto ingredientes sin medida.
-        2. PREPARACIÓN: Debe ser detallada y técnica. Explica tiempos de cocción, tipos de fuego y texturas esperadas.
-        3. FORMATO: Usa exactamente estos campos:
-        {
-          "title": "NOMBRE DEL PLATO | ⚡ 850 kcal | 💪 45g Prot",
-          "ingredients": ["Cantidad + Ingrediente 1", "Cantidad + Ingrediente 2"],
-          "instructions": "1. [Detalle técnico del paso 1]\\n2. [Detalle técnico del paso 2]"
-        }
-        """
+        async with httpx.AsyncClient() as ac:
+            response = await ac.post(api_url, headers=headers, json={"inputs": prompt}, timeout=60.0)
+            if response.status_code == 200:
+                return f"data:image/jpeg;base64,{base64.b64encode(response.content).decode('utf-8')}"
+    except: pass
+    return "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=1000"
 
+@app.get("/search")
+async def search(query: str = Query(...), personas: int = Query(2)):
+    try:
+        system_prompt = f"""
+        Eres un Chef Pro. Responde solo en JSON y en ESPAÑOL.
+        Calcula las cantidades EXACTAS para {personas} personas.
+        {{"title": "NOMBRE", "kcal": "500", "prot": "30g", "ing": ["cant + item"], "ins": "pasos"}}
+        """
         completion = client.chat.completions.create(
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": f"Genera una receta profesional y detallada para: {query}"}
-            ],
+            messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": query}],
             model="llama-3.3-70b-versatile",
             response_format={"type": "json_object"}
         )
-        
         data = json.loads(completion.choices[0].message.content)
         
-        # Aseguramos que las instrucciones sean un solo bloque de texto con saltos de línea
-        instrucciones = data.get("instructions", "")
-        if isinstance(instrucciones, list):
-            instrucciones = "\n".join(instrucciones)
+        # Generamos la imagen real
+        url_imagen = await generar_imagen_ia(data.get("title", query))
 
         return [{
             "title": data.get("title", query).upper(),
-            "ingredients": data.get("ingredients", []),
-            "instructions": instrucciones,
-            "image_url": "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=1000",
-            "description": f"Receta detallada de {query}"
+            "kcal": data.get("kcal", "0"),
+            "proteina": data.get("prot", "0g"),
+            "ingredients": data.get("ing", []),
+            "instructions": data.get("ins", ""),
+            "image_url": url_imagen
         }]
     except Exception as e:
-        return [{"title": "ERROR", "ingredients": [], "instructions": str(e)}]
+        return [{"title": "ERROR", "instructions": str(e)}]
