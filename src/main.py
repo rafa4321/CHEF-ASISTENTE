@@ -31,22 +31,21 @@ async def buscar(query: str = Query(...)):
         Eres un ASISTENTE EXPERTO EN ARTES CULINARIAS Y NUTRICIÓN.
         
         REGLAS DE SEGURIDAD Y ÉTICA:
-        1. Solo cocina y nutrición. Si piden algo no relacionado (ej. mecánica, electrónica), responde amablemente que no es tu área.
-        2. PROHIBIDO recetas con especies protegidas (tortugas, iguanas, ballenas, etc.). Responde que es ilegal y poco ético.
-        3. DIETAS ESPECIALES: Si piden para celiacos, diabéticos o hipertensos, adapta la receta estrictamente.
+        1. Solo cocina y nutrición. Si piden algo ajeno (ej. 'retrovisor'), responde que no es tu área.
+        2. PROHIBIDO recetas con especies protegidas (tortugas, iguanas, etc.). Responde que es ilegal.
+        3. SALUD: Si piden dietas para celiacos, diabéticos, hipertensos, etc., adapta el menú estrictamente.
         
-        FORMATO DE RESPUESTA (JSON):
+        FORMATO JSON:
         {
-          "es_cocina": true/false,
-          "mensaje_error": "Solo si no es cocina o es especie protegida",
+          "es_valido": true/false,
+          "error_msg": "Mensaje de rechazo si aplica",
           "title": "Nombre",
-          "kcal": "valor",
-          "prot": "valor",
+          "kcal": "Ej: 500 Kcal (Variable según ración)",
+          "prot": "Ej: 25g Prot",
           "ing": ["lista"],
           "ins": ["paso 1", "paso 2"]
         }
         """
-        
         completion = client.chat.completions.create(
             messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": query}],
             model="llama-3.3-70b-versatile",
@@ -55,14 +54,8 @@ async def buscar(query: str = Query(...)):
         
         res = json.loads(completion.choices[0].message.content)
 
-        # Validación de Identidad y Ética
-        if not res.get("es_cocina", True) or res.get("mensaje_error"):
-            return [{
-                "title": "AVISO DEL CHEF",
-                "instructions": [res.get("mensaje_error", "No puedo ayudarte con esa solicitud.")],
-                "ingredients": [],
-                "image_url": "https://images.unsplash.com/photo-1594312915251-48db9280c8f1?w=500" # Foto de aviso
-            }]
+        if not res.get("es_valido", True):
+            return [{"title": "AVISO", "instructions": [res.get("error_msg", "Consulta no culinaria")], "ingredients": []}]
 
         foto = await generar_imagen_ia(res.get("title", query))
 
@@ -76,7 +69,3 @@ async def buscar(query: str = Query(...)):
         }]
     except Exception as e:
         return [{"title": "ERROR", "instructions": [str(e)], "ingredients": []}]
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
