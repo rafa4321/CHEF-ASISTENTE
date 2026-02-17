@@ -11,33 +11,40 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], all
 
 client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
-async def obtener_foto_ia(prompt_plato):
-    """Llamada a Hugging Face para generar la imagen real"""
+async def generar_foto_ia(nombre_plato):
+    """Se comunica con Hugging Face para generar la imagen real del plato"""
     url_hf = "https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-xl-base-1.0"
     headers = {"Authorization": f"Bearer {os.getenv('HF_TOKEN')}"}
     try:
         async with httpx.AsyncClient() as ac:
-            payload = {"inputs": f"Gourmet food photography of {prompt_plato}, professional lighting, 8k resolution"}
+            # Prompt optimizado para realismo gourmet
+            payload = {
+                "inputs": f"Professional gourmet food photography of {nombre_plato}, high resolution, 8k, cinematic lighting, appetizing, top view",
+                "parameters": {"negative_prompt": "blurry, low quality, distorted food"}
+            }
             response = await ac.post(url_hf, headers=headers, json=payload, timeout=40.0)
             if response.status_code == 200:
-                # Convertimos el binario de la imagen a Base64 para Flutter
+                # Convertimos el binario recibido en Base64 para enviarlo a Flutter
                 img_b64 = base64.b64encode(response.content).decode('utf-8')
                 return f"data:image/jpeg;base64,{img_b64}"
     except Exception as e:
-        print(f"Error en imagen: {e}")
+        print(f"Error generando imagen: {e}")
+    # Imagen de respaldo si falla la comunicación con la IA
     return "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=1000"
 
 @app.get("/search")
 async def buscar(query: str = Query(...)):
     try:
         system_prompt = """
-        Eres un ASISTENTE CULINARIO Y NUTRICIONISTA PROFESIONAL.
-        REGLAS:
-        1. Solo temas de cocina y salud alimentaria. Si no es culinario, rechaza.
-        2. Prohibido especies protegidas (tortuga, iguana, etc.).
-        3. Para condiciones médicas (diabetes, celiaquía), adapta la dieta.
-        Responde estrictamente en JSON:
-        {"valido": true, "error": "", "title": "...", "kcal": "...", "prot": "...", "ing": [...], "ins": [...]}
+        Eres un ASISTENTE EXPERTO EN ARTES CULINARIAS Y NUTRICIÓN.
+        
+        REGLAS ESTRICTAS DE RESPUESTA:
+        1. IDENTIDAD: Solo cocina y nutrición. Si piden algo no culinario (ej. 'retrovisor'), responde: {"es_valido": false, "motivo": "Lo siento, como asistente culinario no puedo procesar temas ajenos a la gastronomía."}
+        2. ÉTICA AMBIENTAL: Prohibido cocinar especies protegidas (tortugas, iguanas, etc.). Responde: {"es_valido": false, "motivo": "Esa solicitud incluye especies protegidas y no es ético ni legal procesarla."}
+        3. SALUD: Crea dietas específicas para celiacos, diabéticos, hipertensos, veganos, etc., adaptando ingredientes (ej. sin sal, sin azúcar).
+        
+        FORMATO JSON:
+        {"es_valido": true, "motivo": "", "title": "Nombre", "kcal": "valor", "prot": "valor", "ing": ["..."], "ins": ["..."]}
         """
         
         completion = client.chat.completions.create(
@@ -48,19 +55,24 @@ async def buscar(query: str = Query(...)):
         
         res = json.loads(completion.choices[0].message.content)
 
-        if not res.get("valido"):
-            return [{"title": "AVISO", "instructions": [res.get("error", "Consulta no permitida")], "ingredients": [], "image_url": ""}]
+        if not res.get("es_valido", True):
+            return [{
+                "title": "AVISO DEL CHEF",
+                "instructions": [res.get("motivo")],
+                "ingredients": [],
+                "image_url": "https://images.unsplash.com/photo-1594312915251-48db9280c8f1?w=500"
+            }]
 
-        # ACTIVACIÓN DE FOTO POR IA
-        url_final = await obtener_foto_ia(res.get("title", query))
+        # Generar fotografía mediante IA
+        foto_final = await generar_foto_ia(res.get("title", query))
 
         return [{
-            "title": res.get("title").upper(),
-            "kcal": res.get("kcal"),
-            "proteina": res.get("prot"),
-            "ingredients": res.get("ing"),
-            "instructions": res.get("ins"), # Enviado como lista de pasos
-            "image_url": url_final
+            "title": res.get("title", query).upper(),
+            "kcal": res.get("kcal", "---"),
+            "proteina": res.get("prot", "---"),
+            "ingredients": res.get("ing", []),
+            "instructions": res.get("ins", []),
+            "image_url": foto_final
         }]
     except Exception as e:
         return [{"title": "ERROR", "instructions": [str(e)]}]
