@@ -12,7 +12,7 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], all
 client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
 async def generar_foto_profesional(prompt_visual):
-    # Usamos FAL.AI con el modelo FLUX.1 [Dev] para calidad máxima
+    # Usamos FAL.AI con FLUX.1 [Dev] para calidad máxima
     url = "https://fal.run/fal-ai/flux/dev"
     headers = {
         "Authorization": f"Key {os.getenv('FAL_KEY')}",
@@ -28,12 +28,9 @@ async def generar_foto_profesional(prompt_visual):
 
     try:
         async with httpx.AsyncClient() as ac:
-            # Fal.ai es ultra rápido, bajamos el timeout a 30s
-            response = await ac.post(url, headers=headers, json=payload, timeout=30.0)
-            
+            response = await ac.post(url, headers=headers, json=payload, timeout=40.0)
             if response.status_code == 200:
                 data = response.json()
-                # Fal nos da una URL directa de alta velocidad
                 return data.get("images", [{}])[0].get("url", "")
             else:
                 print(f"Error Fal.ai: {response.status_code} - {response.text}")
@@ -45,16 +42,23 @@ async def generar_foto_profesional(prompt_visual):
 @app.get("/search")
 async def buscar(query: str = Query(...)):
     try:
-        # 1. LLAMA 3 genera la receta y el PROMPT VISUAL
+        # INSTRUCCIONES ESTRICTAS PARA RECETA PROLIJA
         system_prompt = """
-        Eres un Chef Estrella Michelin. Responde en JSON estricto:
+        Eres un Chef Ejecutivo Estrella Michelin. Responde exclusivamente en JSON.
+        
+        REGLAS PARA LA RECETA:
+        1. Cantidades exactas: Usa kg, gr, tazas, cucharaditas.
+        2. Prolijidad: Los ingredientes deben detallar el corte (picado finamente, en rodajas).
+        3. Fases: Las instrucciones deben dividirse en fases (Sellado, Marinado, Cocción).
+        
+        JSON STRUCTURE:
         {
-          "title": "nombre",
-          "kcal": "valor",
-          "prot": "valor",
-          "ing": ["lista"],
-          "ins": ["pasos"],
-          "visual_prompt": "descripción detallada en inglés para una IA de imagen"
+          "title": "NOMBRE DEL PLATO",
+          "kcal": "número total",
+          "prot": "gramos",
+          "ing": ["lista detallada de ingredientes con cantidades"],
+          "ins": ["fase 1: descripción", "fase 2: descripción", "fase 3: descripción"],
+          "visual_prompt": "detailed technical food description in English for AI image generation"
         }
         """
         
@@ -66,8 +70,7 @@ async def buscar(query: str = Query(...)):
         
         res = json.loads(completion.choices[0].message.content)
         
-        # 2. Generamos la imagen con el prompt visual de Llama
-        # Esto asegura que si pides Asado Negro, se pida una imagen de carne oscura.
+        # Generamos la imagen profesional usando el visual_prompt del Chef
         foto_url = await generar_foto_profesional(res.get("visual_prompt", query))
 
         return [{
@@ -79,5 +82,9 @@ async def buscar(query: str = Query(...)):
             "image_url": foto_url
         }]
     except Exception as e:
-        print(f"Error Crítico: {e}")
+        print(f"Error: {e}")
         return [{"title": "ERROR", "instructions": [str(e)], "image_url": ""}]
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
