@@ -11,44 +11,52 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], all
 
 client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
-async def generar_foto_ia(nombre_plato, ingredientes_clave=""):
-    # URL actualizada al Router de Hugging Face
-    url_hf = "https://router.huggingface.co/hf-inference/models/black-forest-labs/FLUX.1-schnell"
+async def generar_foto_profesional(prompt_visual):
+    # Usamos FAL.AI con el modelo FLUX.1 [Dev] para calidad máxima
+    url = "https://fal.run/fal-ai/flux/dev"
     headers = {
-        "Authorization": f"Bearer {os.getenv('HF_TOKEN')}",
-        "Content-Type": "application/json",
-        "x-wait-for-model": "true" # Obliga a esperar si el modelo está cargando
+        "Authorization": f"Key {os.getenv('FAL_KEY')}",
+        "Content-Type": "application/json"
     }
     
-    # Mejoramos el prompt basándonos en el nombre y los ingredientes para que sea REALISTA
-    # Si es Asado Negro, la IA sabrá que es carne oscura, no una ensalada.
-    prompt = f"Gourmet food photography of {nombre_plato}, professional plating, high resolution, 4k. Ingredients: {ingredientes_clave}. Cinematic lighting, delicious texture."
+    payload = {
+        "prompt": f"Professional food photography of {prompt_visual}, gourmet plating, high resolution, 4k, realistic textures, cinematic lighting",
+        "image_size": "landscape_4_3",
+        "num_inference_steps": 28,
+        "guidance_scale": 3.5
+    }
 
     try:
         async with httpx.AsyncClient() as ac:
-            response = await ac.post(
-                url_hf, 
-                headers=headers, 
-                json={"inputs": prompt}, 
-                timeout=60.0
-            )
+            # Fal.ai es ultra rápido, bajamos el timeout a 30s
+            response = await ac.post(url, headers=headers, json=payload, timeout=30.0)
             
             if response.status_code == 200:
-                img_b64 = base64.b64encode(response.content).decode('utf-8')
-                return f"data:image/jpeg;base64,{img_b64}"
+                data = response.json()
+                # Fal nos da una URL directa de alta velocidad
+                return data.get("images", [{}])[0].get("url", "")
             else:
-                # Si falla, imprimimos el error exacto en los logs de Render
-                print(f"ERROR HF ({response.status_code}): {response.text}")
-                return "" # DEVOLVEMOS VACÍO PARA NO MOSTRAR FOTOS FALSAS
+                print(f"Error Fal.ai: {response.status_code} - {response.text}")
+                return ""
     except Exception as e:
-        print(f"EXCEPCIÓN IA: {e}")
+        print(f"Excepción en Fal.ai: {e}")
         return ""
 
 @app.get("/search")
 async def buscar(query: str = Query(...)):
     try:
-        # Pedimos a Llama que nos de el JSON y una breve descripción física del plato
-        system_prompt = "Eres un Chef. Responde en JSON: {title, kcal, prot, ing:[], ins:[], description: 'breve descripcion visual'}"
+        # 1. LLAMA 3 genera la receta y el PROMPT VISUAL
+        system_prompt = """
+        Eres un Chef Estrella Michelin. Responde en JSON estricto:
+        {
+          "title": "nombre",
+          "kcal": "valor",
+          "prot": "valor",
+          "ing": ["lista"],
+          "ins": ["pasos"],
+          "visual_prompt": "descripción detallada en inglés para una IA de imagen"
+        }
+        """
         
         completion = client.chat.completions.create(
             messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": query}],
@@ -58,9 +66,9 @@ async def buscar(query: str = Query(...)):
         
         res = json.loads(completion.choices[0].message.content)
         
-        # Usamos el título Y los primeros 3 ingredientes para que la foto sea exacta
-        tags_visuales = ", ".join(res.get("ing", [])[:3])
-        foto_data = await generar_foto_ia(res.get("title", query), tags_visuales)
+        # 2. Generamos la imagen con el prompt visual de Llama
+        # Esto asegura que si pides Asado Negro, se pida una imagen de carne oscura.
+        foto_url = await generar_foto_profesional(res.get("visual_prompt", query))
 
         return [{
             "title": res.get("title", "RECETA").upper(),
@@ -68,7 +76,8 @@ async def buscar(query: str = Query(...)):
             "proteina": f"{res.get('prot', '---')} Prot",
             "ingredients": res.get("ing", []),
             "instructions": res.get("ins", []),
-            "image_url": foto_data # Si está vacío, Flutter mostrará un icono de comida
+            "image_url": foto_url
         }]
     except Exception as e:
+        print(f"Error Crítico: {e}")
         return [{"title": "ERROR", "instructions": [str(e)], "image_url": ""}]
