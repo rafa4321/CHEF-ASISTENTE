@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
 
-# Configuración de CORS para conectar con la App
+# Conexión limpia para Flutter
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -14,42 +14,43 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Configuración de Gemini
+# Configuración única: Gemini 1.5 Flash
 genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
 model = genai.GenerativeModel('gemini-1.5-flash')
 
 @app.get("/search")
 async def buscar(query: str = Query(...)):
+    print(f"Buscando receta para: {query}") # Log para Render
+    
     prompt = f"""
-    Eres un Chef de clase mundial. Genera una receta para: {query}. 
-    Responde ÚNICAMENTE en formato JSON con esta estructura exacta:
+    Genera una receta para: {query}. Responde SOLO en JSON:
     {{
       "title": "nombre",
       "kcal": "valor",
       "proteina": "valor",
       "ingredients": ["lista"],
       "instructions": ["pasos"],
-      "img_prompt": "gourmet professional food photography of {query}, 4k"
+      "img_prompt": "gourmet food photography of {query}, high resolution"
     }}
     """
     try:
         response = model.generate_content(prompt)
-        # Limpieza de markdown
         txt = response.text.replace('```json', '').replace('```', '').strip()
         data = json.loads(txt)
         
-        # Generador de imagen Flux vía Pollinations
-        img_url = f"https://image.pollinations.ai/prompt/{data['img_prompt'].replace(' ', '%20')}?model=flux&width=1024&height=768&nologo=true"
+        # Generación de imagen con Pollinations (NO usa Hugging Face)
+        img_url = f"https://image.pollinations.ai/prompt/{data['img_prompt'].replace(' ', '%20')}?model=flux&nologo=true"
 
         return [{
-            "title": data.get('title', '').upper(),
-            "kcal": f"{data.get('kcal', '---')} Kcal",
-            "proteina": f"{data.get('proteina', '---')} Prot",
-            "ingredients": data.get('ingredients', []),
-            "instructions": data.get('instructions', []),
+            "title": data['title'].upper(),
+            "kcal": f"{data['kcal']} Kcal",
+            "proteina": f"{data['proteina']} Prot",
+            "ingredients": data['ingredients'],
+            "instructions": data['instructions'],
             "image_url": img_url
         }]
     except Exception as e:
+        print(f"Error detectado: {e}")
         return [{"title": "ERROR", "instructions": [str(e)], "image_url": ""}]
 
 if __name__ == "__main__":
