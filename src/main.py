@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
 
-# Configuración de CORS
+# Configuración de CORS para permitir conexión desde Flutter
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -15,49 +15,51 @@ app.add_middleware(
 )
 
 # Configuración de Gemini 1.5 Flash
-# Asegúrate de tener la variable GOOGLE_API_KEY en Render
+# Importante: Debes tener la variable GOOGLE_API_KEY en Render
 genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
 model = genai.GenerativeModel('gemini-1.5-flash')
 
 @app.get("/search")
 async def buscar(query: str = Query(...)):
+    # Prompt optimizado para respuesta JSON pura y rápida
     prompt = f"""
-    Actúa como un Chef Internacional. Genera una receta detallada para: {query}.
-    Responde estrictamente en formato JSON con la siguiente estructura:
+    Actúa como un Chef Internacional experto.
+    Genera una receta para: {query}.
+    Responde ÚNICAMENTE en formato JSON con esta estructura exacta:
     {{
       "title": "Nombre del plato",
       "kcal": "número",
-      "prot": "gramos",
-      "ing": ["ingredientes con cantidades exactas"],
-      "ins": ["pasos numerados"],
-      "img_prompt": "high quality food photography, gourmet plating, {query}, detailed, 4k"
+      "proteina": "gramos",
+      "ingredients": ["lista de ingredientes"],
+      "instructions": ["pasos detallados"],
+      "img_prompt": "professional gourmet food photography, {query}, high resolution, 4k"
     }}
     """
     
     try:
         response = model.generate_content(prompt)
-        # Limpieza de la respuesta para obtener JSON puro
-        raw_text = response.text
-        if "```json" in raw_text:
-            raw_text = raw_text.split("```json")[1].split("```")[0]
+        # Limpieza de posibles etiquetas de markdown
+        txt = response.text.replace('```json', '').replace('```', '').strip()
+        data = json.loads(txt)
         
-        data = json.loads(raw_text.strip())
-        
-        # Generación de imagen vía Pollinations (Motor Flux)
-        img_url = f"[https://image.pollinations.ai/prompt/](https://image.pollinations.ai/prompt/){data['img_prompt'].replace(' ', '%20')}?model=flux&width=1024&height=768&nologo=true"
+        # Generador de imagen Flux (vía Pollinations) - Rápido y estable
+        img_url = f"https://image.pollinations.ai/prompt/{data['img_prompt'].replace(' ', '%20')}?model=flux&nologo=true"
 
+        # Retornamos una lista para mantener compatibilidad con tu RecipeService actual
         return [{
             "title": data.get('title', '').upper(),
-            "kcal": f"{data.get('kcal')} Kcal",
-            "proteina": f"{data.get('prot')} Prot",
-            "ingredients": data.get('ing', []),
-            "instructions": data.get('ins', []),
+            "kcal": f"{data.get('kcal', '---')} Kcal",
+            "proteina": f"{data.get('proteina', '---')} Prot",
+            "ingredients": data.get('ingredients', []),
+            "instructions": data.get('instructions', []),
             "image_url": img_url
         }]
     except Exception as e:
+        print(f"Error: {e}")
         return [{"title": "ERROR", "instructions": [str(e)], "image_url": ""}]
 
 if __name__ == "__main__":
     import uvicorn
+    # Render usa la variable de entorno PORT
     port = int(os.environ.get("PORT", 10000))
     uvicorn.run(app, host="0.0.0.0", port=port)
