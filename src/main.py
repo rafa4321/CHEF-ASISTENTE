@@ -1,90 +1,63 @@
 import os
 import json
-import httpx
-import base64
+import google.generativeai as genai
 from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
-from groq import Groq
 
 app = FastAPI()
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
-client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+# Configuración de CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-async def generar_foto_profesional(prompt_visual):
-    # Usamos FAL.AI con FLUX.1 [Dev] para calidad máxima
-    url = "https://fal.run/fal-ai/flux/dev"
-    headers = {
-        "Authorization": f"Key {os.getenv('FAL_KEY')}",
-        "Content-Type": "application/json"
-    }
-    
-    payload = {
-        "prompt": f"Professional food photography of {prompt_visual}, gourmet plating, high resolution, 4k, realistic textures, cinematic lighting",
-        "image_size": "landscape_4_3",
-        "num_inference_steps": 28,
-        "guidance_scale": 3.5
-    }
-
-    try:
-        async with httpx.AsyncClient() as ac:
-            response = await ac.post(url, headers=headers, json=payload, timeout=40.0)
-            if response.status_code == 200:
-                data = response.json()
-                return data.get("images", [{}])[0].get("url", "")
-            else:
-                print(f"Error Fal.ai: {response.status_code} - {response.text}")
-                return ""
-    except Exception as e:
-        print(f"Excepción en Fal.ai: {e}")
-        return ""
+# Configuración de Gemini 1.5 Flash
+# Asegúrate de tener la variable GOOGLE_API_KEY en Render
+genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
+model = genai.GenerativeModel('gemini-1.5-flash')
 
 @app.get("/search")
 async def buscar(query: str = Query(...)):
+    prompt = f"""
+    Actúa como un Chef Internacional. Genera una receta detallada para: {query}.
+    Responde estrictamente en formato JSON con la siguiente estructura:
+    {{
+      "title": "Nombre del plato",
+      "kcal": "número",
+      "prot": "gramos",
+      "ing": ["ingredientes con cantidades exactas"],
+      "ins": ["pasos numerados"],
+      "img_prompt": "high quality food photography, gourmet plating, {query}, detailed, 4k"
+    }}
+    """
+    
     try:
-        # INSTRUCCIONES ESTRICTAS PARA RECETA PROLIJA
-        system_prompt = """
-        Eres un Chef Ejecutivo Estrella Michelin. Responde exclusivamente en JSON.
+        response = model.generate_content(prompt)
+        # Limpieza de la respuesta para obtener JSON puro
+        raw_text = response.text
+        if "```json" in raw_text:
+            raw_text = raw_text.split("```json")[1].split("```")[0]
         
-        REGLAS PARA LA RECETA:
-        1. Cantidades exactas: Usa kg, gr, tazas, cucharaditas.
-        2. Prolijidad: Los ingredientes deben detallar el corte (picado finamente, en rodajas).
-        3. Fases: Las instrucciones deben dividirse en fases (Sellado, Marinado, Cocción).
+        data = json.loads(raw_text.strip())
         
-        JSON STRUCTURE:
-        {
-          "title": "NOMBRE DEL PLATO",
-          "kcal": "número total",
-          "prot": "gramos",
-          "ing": ["lista detallada de ingredientes con cantidades"],
-          "ins": ["fase 1: descripción", "fase 2: descripción", "fase 3: descripción"],
-          "visual_prompt": "detailed technical food description in English for AI image generation"
-        }
-        """
-        
-        completion = client.chat.completions.create(
-            messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": query}],
-            model="llama-3.3-70b-versatile",
-            response_format={"type": "json_object"}
-        )
-        
-        res = json.loads(completion.choices[0].message.content)
-        
-        # Generamos la imagen profesional usando el visual_prompt del Chef
-        foto_url = await generar_foto_profesional(res.get("visual_prompt", query))
+        # Generación de imagen vía Pollinations (Motor Flux)
+        img_url = f"[https://image.pollinations.ai/prompt/](https://image.pollinations.ai/prompt/){data['img_prompt'].replace(' ', '%20')}?model=flux&width=1024&height=768&nologo=true"
 
         return [{
-            "title": res.get("title", "RECETA").upper(),
-            "kcal": f"{res.get('kcal', '---')} Kcal",
-            "proteina": f"{res.get('prot', '---')} Prot",
-            "ingredients": res.get("ing", []),
-            "instructions": res.get("ins", []),
-            "image_url": foto_url
+            "title": data.get('title', '').upper(),
+            "kcal": f"{data.get('kcal')} Kcal",
+            "proteina": f"{data.get('prot')} Prot",
+            "ingredients": data.get('ing', []),
+            "instructions": data.get('ins', []),
+            "image_url": img_url
         }]
     except Exception as e:
-        print(f"Error: {e}")
         return [{"title": "ERROR", "instructions": [str(e)], "image_url": ""}]
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
+    port = int(os.environ.get("PORT", 10000))
+    uvicorn.run(app, host="0.0.0.0", port=port)
