@@ -1,6 +1,6 @@
 import os
 import json
-from genai import Client
+from google import genai 
 from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -14,7 +14,7 @@ app.add_middleware(
 )
 
 # Cliente moderno de Gemini 2026
-client = Client(api_key=os.getenv("GOOGLE_API_KEY"))
+client = genai.Client(api_key=os.getenv("GOOGLE_API_KEY"))
 
 @app.get("/search")
 async def buscar(query: str = Query(...)):
