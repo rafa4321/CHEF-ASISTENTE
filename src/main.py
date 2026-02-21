@@ -6,7 +6,6 @@ from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
 
-# Configuración de CORS para que tu App de Flutter pueda conectar sin bloqueos
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -14,8 +13,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Inicializamos el cliente usando la variable de entorno que ya configuraste en Render
-# Usamos 'google-genai' (la versión que instalaste satisfactoriamente)
+# Inicializamos el cliente
 client = genai.Client(api_key=os.getenv("GOOGLE_API_KEY"))
 
 @app.get("/search")
@@ -25,22 +23,27 @@ async def buscar_receta(query: str = Query(...)):
         "Responde ESTRICTAMENTE en formato JSON con esta estructura: "
         '{"title": "Nombre", "kcal": "valor", "proteina": "valor", '
         '"ingredients": ["item1", "item2"], "instructions": ["paso1", "paso2"], '
-        '"img_prompt": "descripción de imagen para IA"}'
+        '"img_prompt": "comida gourmet de tipo {query}"}'
     )
     
     try:
-        # Usamos gemini-2.0-flash que es el modelo más actual y compatible
+        # CAMBIO CLAVE: Usamos el nombre del modelo estable actual
         response = client.models.generate_content(
-            model="gemini-2.0-flash", 
+            model="gemini-2.0-flash-exp", 
             contents=prompt
         )
         
-        # Limpieza del texto por si la IA devuelve markdown
-        texto_limpio = response.text.strip().replace("```json", "").replace("```", "")
+        # Limpieza robusta del JSON
+        texto_limpio = response.text.strip()
+        if "```json" in texto_limpio:
+            texto_limpio = texto_limpio.split("```json")[1].split("```")[0].strip()
+        elif "```" in texto_limpio:
+            texto_limpio = texto_limpio.split("```")[1].split("```")[0].strip()
+            
         data = json.loads(texto_limpio)
         
-        # Generador de imagen (Pollinations es gratuito y rápido)
-        img_url = f"https://image.pollinations.ai/prompt/{data['img_prompt'].replace(' ', '%20')}?model=flux&nologo=true"
+        # Generador de imagen gratuito
+        img_url = f"https://image.pollinations.ai/prompt/{data['img_prompt'].replace(' ', '%20')}?model=flux&width=1024&height=1024&nologo=true"
 
         return [{
             "title": data.get('title', 'Receta').upper(),
@@ -51,8 +54,8 @@ async def buscar_receta(query: str = Query(...)):
             "image_url": img_url
         }]
     except Exception as e:
-        return [{"error": f"Error en la conexión con Gemini: {str(e)}"}]
+        return [{"error": f"Error: {str(e)}"}]
 
 @app.get("/")
 async def root():
-    return {"mensaje": "Backend de Chef Asistente funcionando correctamente"}
+    return {"mensaje": "Chef Asistente API Online"}
