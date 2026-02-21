@@ -17,57 +17,55 @@ app.add_middleware(
 async def buscar_receta(query: str = Query(...)):
     api_key = os.getenv("GOOGLE_API_KEY")
     
-    # LA FÓRMULA: Usamos v1 (Estable) con el path completo del modelo
-    url = f"https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key={api_key}"
+    # ENDPOINT ESTABLE: v1beta es el que mejor soporta JSON estructurado actualmente
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
     
     headers = {'Content-Type': 'application/json'}
     
+    # Payload simplificado (Sin campos que den error 400)
     payload = {
         "contents": [{
             "parts": [{
                 "text": (
-                    f"Genera una receta de cocina para: {query}. "
-                    "Responde estrictamente en formato JSON con esta estructura exacta: "
+                    f"Genera una receta para: {query}. "
+                    "Responde SOLO con un objeto JSON (sin markdown, sin texto extra) con esta estructura: "
                     '{"title": "Nombre", "kcal": "valor", "proteina": "valor", '
-                    '"ingredients": ["item1", "item2"], "instructions": ["paso1", "paso2"], '
-                    '"img_prompt": "comida gourmet de {query}"}'
+                    '"ingredients": ["item1"], "instructions": ["paso1"], '
+                    '"img_prompt": "foto de {query}"}'
                 )
             }]
-        }],
-        "generationConfig": {
-            "temperature": 1,
-            "topP": 0.95,
-            "topK": 40,
-            "maxOutputTokens": 8192,
-            "responseMimeType": "application/json",
-        }
+        }]
     }
 
     async with httpx.AsyncClient() as client:
         try:
             response = await client.post(url, headers=headers, json=payload, timeout=30.0)
-            
-            # Si hay error, lo mostramos detallado para no adivinar más
-            if response.status_code != 200:
-                return [{"error": f"Error {response.status_code}", "detalle": response.json()}]
-            
             data = response.json()
+            
+            # Verificación de errores de Google
+            if "error" in data:
+                return [{"error": f"Error de Google: {data['error']['message']}"}]
+
+            # Extraemos el texto y limpiamos CUALQUIER residuo de Markdown
             texto_ia = data['candidates'][0]['content']['parts'][0]['text']
+            texto_ia = texto_ia.replace("```json", "").replace("```", "").strip()
+            
             receta = json.loads(texto_ia)
             
+            # Generación de imagen
             img_url = f"https://image.pollinations.ai/prompt/{receta.get('img_prompt', query).replace(' ', '%20')}?model=flux&nologo=true"
 
             return [{
                 "title": receta.get('title', query).upper(),
-                "kcal": f"{receta.get('kcal', '0')} Kcal",
-                "proteina": f"{receta.get('proteina', '0')} Prot",
+                "kcal": receta.get('kcal', '0'),
+                "proteina": receta.get('proteina', '0'),
                 "ingredients": receta.get('ingredients', []),
                 "instructions": receta.get('instructions', []),
                 "image_url": img_url
             }]
         except Exception as e:
-            return [{"error": f"Error de conexión: {str(e)}"}]
+            return [{"error": f"Error en el servidor: {str(e)}"}]
 
 @app.get("/")
 async def root():
-    return {"status": "online", "engine": "Gemini 1.5 Flash (V1)"}
+    return {"status": "online", "model": "Gemini 1.5 Flash Final"}
