@@ -17,10 +17,8 @@ app.add_middleware(
 async def buscar_receta(query: str = Query(...)):
     api_key = os.getenv("GOOGLE_API_KEY")
     
-    # LA FÓRMULA DE AI STUDIO:
-    # 1. Usamos v1beta
-    # 2. Especificamos el path completo del modelo
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
+    # LA FÓRMULA: Usamos v1 (Estable) con el path completo del modelo
+    url = f"https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key={api_key}"
     
     headers = {'Content-Type': 'application/json'}
     
@@ -29,34 +27,31 @@ async def buscar_receta(query: str = Query(...)):
             "parts": [{
                 "text": (
                     f"Genera una receta de cocina para: {query}. "
-                    "Responde exclusivamente en formato JSON con esta estructura: "
+                    "Responde estrictamente en formato JSON con esta estructura exacta: "
                     '{"title": "Nombre", "kcal": "valor", "proteina": "valor", '
                     '"ingredients": ["item1", "item2"], "instructions": ["paso1", "paso2"], '
-                    '"img_prompt": "foto profesional de {query}"}'
+                    '"img_prompt": "comida gourmet de {query}"}'
                 )
             }]
         }],
         "generationConfig": {
-            "temperature": 0.7,
-            "topK": 40,
+            "temperature": 1,
             "topP": 0.95,
-            "maxOutputTokens": 1024,
+            "topK": 40,
+            "maxOutputTokens": 8192,
             "responseMimeType": "application/json",
         }
     }
 
     async with httpx.AsyncClient() as client:
         try:
-            # Enviamos la petición con los headers y el config de AI Studio
             response = await client.post(url, headers=headers, json=payload, timeout=30.0)
             
-            # Verificación inmediata de la respuesta
+            # Si hay error, lo mostramos detallado para no adivinar más
             if response.status_code != 200:
-                return [{"error": f"Google respondió con error {response.status_code}", "detalle": response.text}]
+                return [{"error": f"Error {response.status_code}", "detalle": response.json()}]
             
             data = response.json()
-            
-            # Extracción segura según la estructura v1beta
             texto_ia = data['candidates'][0]['content']['parts'][0]['text']
             receta = json.loads(texto_ia)
             
@@ -71,8 +66,8 @@ async def buscar_receta(query: str = Query(...)):
                 "image_url": img_url
             }]
         except Exception as e:
-            return [{"error": f"Falla en la comunicación: {str(e)}"}]
+            return [{"error": f"Error de conexión: {str(e)}"}]
 
 @app.get("/")
 async def root():
-    return {"status": "online", "model": "gemini-1.5-flash-v1beta"}
+    return {"status": "online", "engine": "Gemini 1.5 Flash (V1)"}
