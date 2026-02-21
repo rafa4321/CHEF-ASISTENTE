@@ -13,37 +13,37 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Inicializamos el cliente
+# Inicializamos el cliente con la API KEY de Render
 client = genai.Client(api_key=os.getenv("GOOGLE_API_KEY"))
 
 @app.get("/search")
 async def buscar_receta(query: str = Query(...)):
     prompt = (
         f"Genera una receta de cocina para: {query}. "
-        "Responde ESTRICTAMENTE en formato JSON con esta estructura: "
+        "Responde exclusivamente en formato JSON: "
         '{"title": "Nombre", "kcal": "valor", "proteina": "valor", '
-        '"ingredients": ["item1", "item2"], "instructions": ["paso1", "paso2"], '
-        '"img_prompt": "comida gourmet de tipo {query}"}'
+        '"ingredients": ["item1"], "instructions": ["paso1"], '
+        '"img_prompt": "comida gourmet de {query}"}'
     )
     
     try:
-        # CAMBIO CLAVE: Usamos el nombre del modelo estable actual
+        # NOMBRE EXACTO: Sin el prefijo 'models/' porque la librería ya lo asume
+        # Usamos 'gemini-1.5-flash' que es el más estable y universal
         response = client.models.generate_content(
-            model="gemini-2.0-flash-exp", 
+            model="gemini-1.5-flash", 
             contents=prompt
         )
         
-        # Limpieza robusta del JSON
-        texto_limpio = response.text.strip()
-        if "```json" in texto_limpio:
-            texto_limpio = texto_limpio.split("```json")[1].split("```")[0].strip()
-        elif "```" in texto_limpio:
-            texto_limpio = texto_limpio.split("```")[1].split("```")[0].strip()
+        # Limpiamos posibles marcas de markdown del JSON
+        texto = response.text.strip()
+        if "```json" in texto:
+            texto = texto.split("```json")[1].split("```")[0].strip()
+        elif "```" in texto:
+            texto = texto.split("```")[1].split("```")[0].strip()
             
-        data = json.loads(texto_limpio)
+        data = json.loads(texto)
         
-        # Generador de imagen gratuito
-        img_url = f"https://image.pollinations.ai/prompt/{data['img_prompt'].replace(' ', '%20')}?model=flux&width=1024&height=1024&nologo=true"
+        img_url = f"https://image.pollinations.ai/prompt/{data['img_prompt'].replace(' ', '%20')}?model=flux&nologo=true"
 
         return [{
             "title": data.get('title', 'Receta').upper(),
@@ -54,8 +54,9 @@ async def buscar_receta(query: str = Query(...)):
             "image_url": img_url
         }]
     except Exception as e:
-        return [{"error": f"Error: {str(e)}"}]
+        # Esto nos dirá exactamente qué modelo está pidiendo Google si falla
+        return [{"error": f"Error técnico: {str(e)}"}]
 
 @app.get("/")
 async def root():
-    return {"mensaje": "Chef Asistente API Online"}
+    return {"mensaje": "Chef Asistente API lista"}
