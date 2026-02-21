@@ -1,6 +1,6 @@
 import os
+import httpx
 import json
-from google import genai # Importación correcta para 2026
 from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -13,53 +13,45 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Inicializamos el cliente moderno
-client = genai.Client(api_key=os.getenv("GOOGLE_API_KEY"))
-
 @app.get("/search")
 async def buscar_receta(query: str = Query(...)):
-    prompt = (
-        f"Genera una receta para: {query}. "
-        "Responde exclusivamente en formato JSON: "
-        '{"title": "Nombre", "kcal": "valor", "proteina": "valor", '
-        '"ingredients": ["item1"], "instructions": ["paso1"], '
-        '"img_prompt": "comida gourmet de {query}"}'
-    )
+    api_key = os.getenv("GOOGLE_API_KEY")
+    # URL directa de la API de Google, sin usar librerías intermedias
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
     
-    try:
-        # En la librería nueva, el modelo se pone sin el prefijo 'models/'
-        response = client.models.generate_content(
-            model='gemini-1.5-flash', 
-            contents=prompt
-        )
-        
-        # PROTECCIÓN DEFINITIVA: Validamos si hay respuesta antes de usar .text o .strip()
-        if not response or not hasattr(response, 'text') or not response.text:
-            return [{"error": "Google no generó contenido para esta búsqueda."}]
-            
-        texto = response.text.strip()
-        
-        # Limpiamos el texto si Gemini envía markdown
-        if "```json" in texto:
-            texto = texto.split("```json")[1].split("```")[0].strip()
-        elif "```" in texto:
-            texto = texto.split("```")[1].split("```")[0].strip()
-            
-        data = json.loads(texto)
-        img_url = f"https://image.pollinations.ai/prompt/{data.get('img_prompt', query).replace(' ', '%20')}?model=flux&nologo=true"
-
-        return [{
-            "title": data.get('title', 'Receta').upper(),
-            "kcal": f"{data.get('kcal', '0')} Kcal",
-            "proteina": f"{data.get('proteina', '0')} Prot",
-            "ingredients": data.get('ingredients', []),
-            "instructions": data.get('instructions', []),
-            "image_url": img_url
+    payload = {
+        "contents": [{
+            "parts": [{
+                "text": f"Genera una receta para: {query}. Responde solo en JSON con: title, kcal, proteina, ingredients (lista), instructions (lista), img_prompt."
+            }]
         }]
-    except Exception as e:
-        # Esto atrapará cualquier error y te dirá exactamente qué pasa sin tumbar el servidor
-        return [{"error": f"Error en la conexión con Gemini: {str(e)}"}]
+    }
+
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.post(url, json=payload)
+            data = response.json()
+            
+            # Extraemos el texto de la respuesta de Google
+            texto_ia = data['candidates'][0]['content']['parts'][0]['text']
+            
+            # Limpiamos el JSON por si viene con ```json
+            texto_ia = texto_ia.replace("```json", "").replace("```", "").strip()
+            receta = json.loads(texto_ia)
+            
+            img_url = f"[https://image.pollinations.ai/prompt/](https://image.pollinations.ai/prompt/){receta.get('img_prompt', query).replace(' ', '%20')}?model=flux&nologo=true"
+
+            return [{
+                "title": receta.get('title', query).upper(),
+                "kcal": receta.get('kcal', 'N/A'),
+                "proteina": receta.get('proteina', 'N/A'),
+                "ingredients": receta.get('ingredients', []),
+                "instructions": receta.get('instructions', []),
+                "image_url": img_url
+            }]
+        except Exception as e:
+            return [{"error": f"Error crítico: {str(e)}", "detalles": data if 'data' in locals() else "No hay respuesta de Google"}]
 
 @app.get("/")
 async def root():
-    return {"mensaje": "Backend Chef-Asistente 2.0 operativo"}
+    return {"status": "online", "message": "Chef Asistente API v3.0"}
