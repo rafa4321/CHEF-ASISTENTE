@@ -11,15 +11,15 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], all
 async def buscar_receta(query: str = Query(...)):
     api_key = os.getenv("GOOGLE_API_KEY")
     
-    # USAMOS TU MODELO ACTUAL: gemini-2.0-flash (visto en tu captura)
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={api_key}"
+    # CAMBIO A MODELO 8B: Mayor cuota gratuita y mayor velocidad de respuesta
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-8b:generateContent?key={api_key}"
     
     payload = {
         "contents": [{
             "parts": [{
                 "text": (
                     f"Genera una receta para: {query}. "
-                    "Responde SOLO con un objeto JSON con esta estructura: "
+                    "Responde SOLO con un objeto JSON (sin markdown) con esta estructura: "
                     '{"title": "Nombre", "kcal": "valor", "proteina": "valor", '
                     '"ingredients": ["item1"], "instructions": ["paso1"], '
                     '"img_prompt": "foto de {query}"}'
@@ -33,11 +33,11 @@ async def buscar_receta(query: str = Query(...)):
             response = await client.post(url, json=payload, timeout=30.0)
             data = response.json()
             
+            # Si aún hay error de cuota, el mensaje será claro
             if "error" in data:
-                return [{"error": f"Google dice: {data['error']['message']}"}]
+                return [{"error": f"Aviso de Google: {data['error']['message']}"}]
 
             texto_ia = data['candidates'][0]['content']['parts'][0]['text']
-            # Limpiamos el texto de posibles etiquetas de markdown
             texto_ia = texto_ia.replace("```json", "").replace("```", "").strip()
             
             receta = json.loads(texto_ia)
@@ -52,8 +52,8 @@ async def buscar_receta(query: str = Query(...)):
                 "image_url": img_url
             }]
         except Exception as e:
-            return [{"error": f"Fallo en el servidor: {str(e)}"}]
+            return [{"error": f"Error en servidor: {str(e)}"}]
 
 @app.get("/")
 async def root():
-    return {"status": "online", "model": "Gemini 2.0 Flash Sincronizado"}
+    return {"status": "online", "model": "Gemini 1.5 Flash 8B (High Quota)"}
