@@ -6,7 +6,6 @@ from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
 
-# Configuración de CORS para que tu App de Flutter pueda conectarse sin problemas
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -18,19 +17,18 @@ app.add_middleware(
 async def buscar_receta(query: str = Query(...)):
     api_key = os.getenv("GOOGLE_API_KEY")
     
-    # Motor de máxima potencia: Gemini 2.0 Flash
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={api_key}"
+    # ACTUALIZACIÓN: Usamos Gemini 2.5 Flash (visto en tu lista de modelos)
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
     
     payload = {
         "contents": [{
             "parts": [{
                 "text": (
-                    f"Genera una receta deliciosa para: {query}. "
-                    "Responde estrictamente en formato JSON con esta estructura: "
+                    f"Genera una receta para: {query}. "
+                    "Responde estrictamente en formato JSON plano (sin markdown) con esta estructura: "
                     '{"title": "Nombre", "kcal": "valor", "proteina": "valor", '
-                    '"ingredients": ["ingrediente 1", "ingrediente 2"], '
-                    '"instructions": ["paso 1", "paso 2"], '
-                    '"img_prompt": "comida gourmet de {query}"}'
+                    '"ingredients": ["item 1", "item 2"], "instructions": ["paso 1", "paso 2"], '
+                    '"img_prompt": "foto gourmet de {query}"}'
                 )
             }]
         }]
@@ -41,17 +39,16 @@ async def buscar_receta(query: str = Query(...)):
             response = await client.post(url, json=payload, timeout=30.0)
             data = response.json()
             
-            # Si hay algún error, lo capturamos
             if "error" in data:
-                return [{"error": f"Error de API: {data['error']['message']}"}]
+                return [{"error": f"Google 2.5 dice: {data['error']['message']}"}]
 
             texto_ia = data['candidates'][0]['content']['parts'][0]['text']
-            # Limpiamos el JSON por si la IA agrega etiquetas markdown
+            # Limpiamos el texto por si la IA se pone creativa con el formato
             texto_ia = texto_ia.replace("```json", "").replace("```", "").strip()
             
             receta = json.loads(texto_ia)
             
-            # Generador de imagen Flux para que la receta se vea increíble
+            # Generamos la imagen con Pollinations (Modelo Flux)
             img_url = f"https://image.pollinations.ai/prompt/{receta.get('img_prompt', query).replace(' ', '%20')}?model=flux&nologo=true"
 
             return [{
@@ -63,8 +60,8 @@ async def buscar_receta(query: str = Query(...)):
                 "image_url": img_url
             }]
         except Exception as e:
-            return [{"error": f"Error en el servidor: {str(e)}"}]
+            return [{"error": f"Error del servidor: {str(e)}"}]
 
 @app.get("/")
 async def root():
-    return {"status": "online", "mode": "Premium (Gemini 2.0 Flash)"}
+    return {"status": "online", "model": "Gemini 2.5 Flash (Pago activado)"}
