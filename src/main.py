@@ -1,41 +1,37 @@
 import os
 import json
-import re
-from google import genai # Importación correcta según logs
+from google import genai
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 
 app = Flask(__name__)
 CORS(app)
 
-# Inicialización segura del cliente
-api_key = os.environ.get("GOOGLE_API_KEY")
-client = genai.Client(api_key=api_key)
+# Inicializamos el cliente con la nueva librería según tus logs
+client = genai.Client(api_key=os.environ.get("GOOGLE_API_KEY"))
 
 @app.route('/search', methods=['GET'])
-def search_recipe(): # Cambié el nombre para evitar conflictos con la librería 're'
-    query = request.args.get('query', '')
-    if not query:
-        return jsonify([{"title": "Error: Consulta vacía"}]), 400
-
+def search_recipe():
+    query = request.args.get('query', 'comida')
+    
     try:
         response = client.models.generate_content(
             model="gemini-2.0-flash",
-            contents=f"Genera una receta de {query} en JSON puro con: title, kcal, proteina, ingredients[], instructions[]."
+            contents=f"Genera una receta de {query} en JSON puro con: title, kcal, proteina, ingredients[], instructions[]. Sin texto extra."
         )
         
-        # VALIDACIÓN CRÍTICA: Aseguramos que 'text' exista y sea string
+        # SOLUCIÓN AL ERROR 'None': Forzamos a que sea un string vacío si falla
         raw_text = response.text if response.text else ""
         
-        # Usamos re.search solo si tenemos texto para evitar el error de tu captura
-        match = re.search(r'\{.*\}', raw_text, re.DOTALL)
+        # Limpieza de seguridad
+        clean_json = raw_text.replace('```json', '').replace('```', '').strip()
         
-        if match:
-            data = json.loads(match.group(0))
-        else:
-            raise ValueError("No se pudo extraer el JSON de la respuesta")
+        if not clean_json:
+            raise ValueError("La IA devolvió un contenido vacío")
 
-        # Formateamos la respuesta como la lista que espera Flutter
+        data = json.loads(clean_json)
+
+        # RETORNO: Siempre una lista para que Flutter no explote
         return jsonify([{
             "title": data.get("title", query),
             "kcal": str(data.get("kcal", "0")),
@@ -47,13 +43,15 @@ def search_recipe(): # Cambié el nombre para evitar conflictos con la librería
 
     except Exception as e:
         print(f"Error detectado: {e}")
+        # Respuesta de emergencia profesional
         return jsonify([{
-            "title": "Error de conexión",
+            "title": "Receta no encontrada",
             "kcal": "0", "proteina": "0",
-            "ingredients": ["No se pudo obtener la receta"],
-            "instructions": [str(e)],
+            "ingredients": ["Intenta con otro ingrediente"],
+            "instructions": ["Hubo un problema temporal con la IA"],
             "image_url": ""
-        }]), 500
+        }])
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 10000)))
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host='0.0.0.0', port=port)
