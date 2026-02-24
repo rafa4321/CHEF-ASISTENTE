@@ -15,22 +15,19 @@ def search():
     query = request.args.get('query', '')
     try:
         model = genai.GenerativeModel('gemini-1.5-flash')
-        # Prompt de control total
-        prompt = f"Genera una receta de {query}. Responde ÚNICAMENTE el JSON puro. Sin ```json ni texto."
+        prompt = f"Genera una receta de {query} en JSON puro. Sin texto extra."
         response = model.generate_content(prompt)
         
-        # LIMPIEZA MAESTRA: Extraemos solo lo que está entre llaves {}
-        text = response.text
-        match = re.search(r'\{.*\}', text, re.DOTALL)
-        if match:
-            clean_json = match.group(0)
-            data = json.loads(clean_json)
-        else:
-            raise Exception("No se encontró JSON válido")
+        # SOLUCIÓN AL ERROR 500: Extraer solo lo que está entre llaves { }
+        match = re.search(r'\{.*\}', response.text, re.DOTALL)
+        if not match:
+            raise Exception("La IA no envió un JSON válido")
+            
+        data = json.loads(match.group(0))
 
-        # Imagen: Sin proxies, carga directa desde CDN público
-        plato = data.get('title', 'food').replace(" ", ",")
-        image_url = f"[https://loremflickr.com/800/600/food](https://loremflickr.com/800/600/food),{plato}"
+        # SOLUCIÓN AL ERROR 403: Usar una fuente que Chrome no bloquee
+        plato_url = data.get('title', query).replace(" ", ",")
+        image_url = f"[https://loremflickr.com/800/600/food](https://loremflickr.com/800/600/food),{plato_url}"
 
         return jsonify([{
             "title": data.get("title", "Receta"),
@@ -42,6 +39,3 @@ def search():
         }])
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 5000)))
