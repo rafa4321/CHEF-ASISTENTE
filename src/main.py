@@ -1,67 +1,46 @@
 import os
 import json
-import httpx
-from fastapi import FastAPI, Query
-from fastapi.middleware.cors import CORSMiddleware
+import google.generativeai as genai
+from flask import Flask, request, jsonify
+from flask_cors import CORS
 
-app = FastAPI()
+app = Flask(__name__)
+CORS(app)
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# Configura tu clave directamente para pruebas locales si es necesario
+GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY", "TU_CLAVE_AQUI")
+genai.configure(api_key=GOOGLE_API_KEY)
 
-@app.get("/search")
-async def buscar_receta(query: str = Query(...)):
-    api_key = os.getenv("GOOGLE_API_KEY")
-    
-    # ACTUALIZACIÓN: Usamos Gemini 2.5 Flash (visto en tu lista de modelos)
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
-    
-    payload = {
-        "contents": [{
-            "parts": [{
-                "text": (
-                    f"Genera una receta para: {query}. "
-                    "Responde estrictamente en formato JSON plano (sin markdown) con esta estructura: "
-                    '{"title": "Nombre", "kcal": "valor", "proteina": "valor", '
-                    '"ingredients": ["item 1", "item 2"], "instructions": ["paso 1", "paso 2"], '
-                    '"img_prompt": "foto gourmet de {query}"}'
-                )
-            }]
-        }]
-    }
+@app.route('/search', methods=['GET'])
+def search():
+    query = request.args.get('query', '')
+    if not query:
+        return jsonify({"error": "No query"}), 400
 
-    async with httpx.AsyncClient() as client:
-        try:
-            response = await client.post(url, json=payload, timeout=30.0)
-            data = response.json()
-            
-            if "error" in data:
-                return [{"error": f"Google 2.5 dice: {data['error']['message']}"}]
+    try:
+        model = genai.GenerativeModel('gemini-1.5-flash')
+        # Pedimos JSON puro para evitar errores de lectura
+        prompt = f"Dame una receta de {query} en JSON con: title, kcal, proteina, ingredients[], instructions[]. Sin texto extra."
+        response = model.generate_content(prompt)
+        
+        # Limpieza de Markdown si Gemini lo incluye
+        clean_text = response.text.strip().replace("```json", "").replace("```", "")
+        receta = json.loads(clean_text)
 
-            texto_ia = data['candidates'][0]['content']['parts'][0]['text']
-            # Limpiamos el texto por si la IA se pone creativa con el formato
-            texto_ia = texto_ia.replace("```json", "").replace("```", "").strip()
-            
-            receta = json.loads(texto_ia)
-            
-            # Generamos la imagen con Pollinations (Modelo Flux)
-            img_url = f"https://image.pollinations.ai/prompt/{receta.get('img_prompt', query).replace(' ', '%20')}?model=flux&nologo=true"
+        # Usamos LoremFlickr: es la ÚNICA que no da error 403 en Chrome
+        titulo_slug = receta.get('title', query).replace(" ", ",")
+        image_url = f"https://loremflickr.com/800/600/food,{titulo_slug}"
 
-            return [{
-                "title": receta.get('title', query).upper(),
-                "kcal": receta.get('kcal', 'N/A'),
-                "proteina": receta.get('proteina', 'N/A'),
-                "ingredients": receta.get('ingredients', []),
-                "instructions": receta.get('instructions', []),
-                "image_url": img_url
-            }]
-        except Exception as e:
-            return [{"error": f"Error del servidor: {str(e)}"}]
+        return jsonify([{
+            "title": receta.get("title"),
+            "kcal": receta.get("kcal"),
+            "proteina": receta.get("proteina"),
+            "ingredients": receta.get("ingredients"),
+            "instructions": receta.get("instructions"),
+            "image_url": image_url
+        }])
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
-@app.get("/")
-async def root():
-    return {"status": "online", "model": "Gemini 2.5 Flash (Pago activado)"}
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 5000)))
