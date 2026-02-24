@@ -1,6 +1,6 @@
 import os
 import json
-import re
+import re  # Necesario para limpiar la respuesta de la IA
 import google.generativeai as genai
 from flask import Flask, request, jsonify
 from flask_cors import CORS
@@ -16,44 +16,40 @@ genai.configure(api_key=GOOGLE_API_KEY)
 def search():
     query = request.args.get('query', '')
     if not query:
-        return jsonify({"error": "Falta la consulta"}), 400
+        return jsonify({"error": "No query"}), 400
 
     try:
         model = genai.GenerativeModel('gemini-1.5-flash')
-        prompt = f"""
-        Genera una receta de {query}. 
-        Responde ÚNICAMENTE con un objeto JSON válido.
-        Estructura: {{"title": "", "kcal": "", "proteina": "", "ingredients": [], "instructions": []}}
-        """
+        prompt = f"Genera una receta de {query} en JSON puro con: title, kcal, proteina, ingredients[], instructions[]. Sin texto extra."
         
         response = model.generate_content(prompt)
         raw_text = response.text
 
-        # --- EL FILTRO DE SEGURIDAD (REGEX) ---
-        # Buscamos el bloque de llaves {} para ignorar cualquier texto extra de la IA
+        # --- FILTRO REGEX ---
+        # Busca el bloque de llaves {} para evitar el Error 500 si la IA escribe texto extra
         match = re.search(r'\{.*\}', raw_text, re.DOTALL)
         
         if not match:
-            raise ValueError("La IA no generó un JSON válido")
+            raise ValueError("No se encontró JSON válido")
 
-        receta_data = json.loads(match.group(0))
+        data = json.loads(match.group(0))
 
-        # Imagen: Usamos LoremFlickr para evitar el Error 403 de Chrome
-        search_term = receta_data.get('title', query).replace(" ", ",")
+        # Imagen: LoremFlickr es compatible con Chrome y no da Error 403
+        search_term = data.get('title', query).replace(" ", ",")
         image_url = f"https://loremflickr.com/800/600/food,{search_term}"
 
-        # Enviamos la lista [data[0]] que espera Flutter
+        # Enviamos la lista [data] que espera tu código de Flutter
         return jsonify([{
-            "title": receta_data.get("title", "Receta"),
-            "kcal": str(receta_data.get("kcal", "0")),
-            "proteina": str(receta_data.get("proteina", "0")),
-            "ingredients": receta_data.get("ingredients", []),
-            "instructions": receta_data.get("instructions", []),
+            "title": data.get("title", "Receta"),
+            "kcal": str(data.get("kcal", "0")),
+            "proteina": str(data.get("proteina", "0")),
+            "ingredients": data.get("ingredients", []),
+            "instructions": data.get("instructions", []),
             "image_url": image_url
         }])
 
     except Exception as e:
-        print(f"Error en servidor: {str(e)}")
+        print(f"Error detectado: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
