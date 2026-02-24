@@ -1,5 +1,6 @@
 import os
 import json
+import re
 from google import genai
 from flask import Flask, request, jsonify
 from flask_cors import CORS
@@ -7,31 +8,30 @@ from flask_cors import CORS
 app = Flask(__name__)
 CORS(app)
 
-# Inicializamos el cliente con la nueva librería según tus logs
 client = genai.Client(api_key=os.environ.get("GOOGLE_API_KEY"))
 
 @app.route('/search', methods=['GET'])
 def search_recipe():
     query = request.args.get('query', 'comida')
-    
     try:
         response = client.models.generate_content(
             model="gemini-2.0-flash",
-            contents=f"Genera una receta de {query} en JSON puro con: title, kcal, proteina, ingredients[], instructions[]. Sin texto extra."
+            contents=f"Genera una receta de {query} en JSON puro. Solo el objeto JSON con: title, kcal, proteina, ingredients[], instructions[]. Sin introducciones ni markdown."
         )
         
-        # SOLUCIÓN AL ERROR 'None': Forzamos a que sea un string vacío si falla
+        # 1. Aseguramos que recibimos texto
         raw_text = response.text if response.text else ""
         
-        # Limpieza de seguridad
-        clean_json = raw_text.replace('```json', '').replace('```', '').strip()
+        # 2. VICTORIA: Buscamos el JSON entre las llaves { } ignorando todo lo demás
+        match = re.search(r'\{.*\}', raw_text, re.DOTALL)
         
-        if not clean_json:
-            raise ValueError("La IA devolvió un contenido vacío")
+        if match:
+            clean_json = match.group(0)
+            data = json.loads(clean_json)
+        else:
+            raise ValueError("No se encontró un JSON válido en la respuesta")
 
-        data = json.loads(clean_json)
-
-        # RETORNO: Siempre una lista para que Flutter no explote
+        # 3. Enviamos la LISTA que Flutter espera
         return jsonify([{
             "title": data.get("title", query),
             "kcal": str(data.get("kcal", "0")),
@@ -42,16 +42,15 @@ def search_recipe():
         }])
 
     except Exception as e:
-        print(f"Error detectado: {e}")
-        # Respuesta de emergencia profesional
+        print(f"Error real: {e}")
+        # Retorno de emergencia (lo que ves ahora en tu pantalla)
         return jsonify([{
-            "title": "Receta no encontrada",
+            "title": "Error al procesar",
             "kcal": "0", "proteina": "0",
-            "ingredients": ["Intenta con otro ingrediente"],
-            "instructions": ["Hubo un problema temporal con la IA"],
+            "ingredients": ["La IA envió un formato incorrecto"],
+            "instructions": [str(e)],
             "image_url": ""
         }])
 
 if __name__ == '__main__':
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host='0.0.0.0', port=port)
+    app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 10000)))
