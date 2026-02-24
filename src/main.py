@@ -1,41 +1,49 @@
 import os
 import json
 import re
-import google.generativeai as genai
+# CORRECCIÓN: La librería se llama 'google-genai' en pip, pero se importa así:
+from google import genai 
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 
 app = Flask(__name__)
 CORS(app)
 
-genai.configure(api_key=os.environ.get("GOOGLE_API_KEY"))
+# CORRECCIÓN: El cliente se inicializa a través de genai.Client
+client = genai.Client(api_key=os.environ.get("GOOGLE_API_KEY"))
 
 @app.route('/search', methods=['GET'])
 def search():
-    query = request.args.get('query', 'comida')
+    query = request.args.get('query', '')
+    if not query:
+        return jsonify({"error": "Falta consulta"}), 400
+
     try:
-        model = genai.GenerativeModel('gemini-1.5-flash')
-        response = model.generate_content(f"Receta de {query} en JSON.")
+        # CORRECCIÓN: Estructura de llamada según la nueva librería
+        response = client.models.generate_content(
+            model="gemini-2.0-flash",
+            contents=f"Dame una receta de {query} en JSON puro: {{'title': '...', 'kcal': '...', 'proteina': '...', 'ingredients': [], 'instructions': []}}"
+        )
         
-        # Intentamos extraer el JSON
-        match = re.search(r'\{.*\}', response.text, re.DOTALL)
-        if match:
-            data = json.loads(match.group(0))
-        else:
-            raise ValueError("No JSON found")
+        raw_text = response.text
+        match = re.search(r'\{.*\}', raw_text, re.DOTALL)
+        
+        if not match:
+            raise ValueError("No se encontró JSON")
 
-        return jsonify([data])
-
-    except Exception:
-        # ALTERNATIVA DE RESPALDO: Si la IA falla, enviamos esto para PROBAR que el servidor sirve
+        data = json.loads(match.group(0))
+        
+        # Devolvemos la LISTA que espera Flutter
         return jsonify([{
-            "title": f"Receta de prueba para {query}",
-            "kcal": "100",
-            "proteina": "10",
-            "ingredients": ["Ingrediente de prueba"],
-            "instructions": ["Paso de prueba"],
-            "image_url": "https://loremflickr.com/320/240/food"
+            "title": data.get("title", query),
+            "kcal": str(data.get("kcal", "0")),
+            "proteina": str(data.get("proteina", "0")),
+            "ingredients": data.get("ingredients", []),
+            "instructions": data.get("instructions", []),
+            "image_url": f"https://loremflickr.com/800/600/food,{query.replace(' ', ',')}"
         }])
+    except Exception as e:
+        return jsonify([{"title": "Error", "ingredients": [str(e)], "instructions": []}]), 500
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 10000)))
