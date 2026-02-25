@@ -2,51 +2,48 @@ import os
 import json
 import re
 from google import genai
-from flask import Flask, request, jsonify, Response
+from flask import Flask, request, jsonify
 from flask_cors import CORS
 
 app = Flask(__name__)
 CORS(app)
 
-# Usamos el cliente oficial actualizado
+# Cliente configurado para la versión estable de producción
 client = genai.Client(api_key=os.environ.get("GOOGLE_API_KEY"))
 
 @app.route('/search', methods=['GET'])
 def search_recipe():
-    query = request.args.get('query', 'pollo')
+    query = request.args.get('query', 'asado')
     try:
-        # Forzamos el modelo estable para evitar el 404 de v1beta
+        # Usamos 1.5-flash: el más rápido y estable disponible en Uruguay
         response = client.models.generate_content(
-            model="gemini-1.5-flash", 
-            contents=f"Genera una receta de {query} en JSON puro. Sin markdown."
+            model="gemini-1.5-flash",
+            contents=f"Genera una receta de {query} en JSON puro. Campos: title, kcal, proteina, ingredients, instructions."
         )
         
-        # Limpieza de seguridad para evitar errores de NoneType
-        text_content = response.text if response.text else "{}"
-        match = re.search(r'\{.*\}', text_content, re.DOTALL)
+        # Validación crítica para evitar errores de 'NoneType'
+        raw_text = response.text if response.text else ""
+        match = re.search(r'\{.*\}', raw_text, re.DOTALL)
         
         if match:
-            clean_json = json.loads(match.group(0))
-            # Añadimos imagen y normalizamos datos
-            recipe_data = {
-                "title": clean_json.get("title", query),
-                "kcal": str(clean_json.get("kcal", "0")),
-                "proteina": str(clean_json.get("proteina", "0")),
-                "ingredients": clean_json.get("ingredients", []),
-                "instructions": clean_json.get("instructions", []),
+            data = json.loads(match.group(0))
+            return jsonify([{
+                "title": data.get("title", query),
+                "kcal": str(data.get("kcal", "0")),
+                "proteina": str(data.get("proteina", "0")),
+                "ingredients": data.get("ingredients", []),
+                "instructions": data.get("instructions", []),
                 "image_url": f"https://loremflickr.com/800/600/food,{query.replace(' ', ',')}"
-            }
-            return jsonify([recipe_data])
-        
-        return jsonify([{"title": "Error de formato"}]), 200
+            }]), 200
+        else:
+            raise ValueError("Formato de respuesta inválido")
 
     except Exception as e:
-        # Fallback para que la app no reciba un error 500
-        print(f"Error: {e}")
+        # Respuesta controlada para que la App no se cierre
         return jsonify([{
             "title": "Error de Conexión",
-            "ingredients": ["Revisa tu configuración"],
-            "instructions": [str(e)],
+            "instructions": [f"Detalle técnico: {str(e)}"],
+            "ingredients": ["Verifica tu API Key en Google AI Studio"],
             "image_url": ""
         }]), 200
 
