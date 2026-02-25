@@ -6,36 +6,29 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 
 app = Flask(__name__)
-# Permitimos CORS para que Flutter Web/Mobile no tenga bloqueos
-CORS(app, resources={r"/*": {"origins": "*"}})
+CORS(app)
 
-# Usamos 1.5-flash por estabilidad (visto error 404 en 2.0 en tus logs)
-MODEL_ID = "gemini-1.5-flash"
+# Configuración del cliente con API Key desde entorno
 client = genai.Client(api_key=os.environ.get("GOOGLE_API_KEY"))
-
-@app.route('/', methods=['GET'])
-def health():
-    return jsonify({"status": "online", "model": MODEL_ID}), 200
 
 @app.route('/search', methods=['GET'])
 def search_recipe():
     query = request.args.get('query', 'comida')
     try:
-        # Prompt optimizado para JSON
-        prompt = (f"Genera una receta de {query} en JSON puro. "
-                  "Campos: title, kcal, proteina, ingredients (lista), instructions (lista). "
-                  "No uses markdown ni texto extra.")
+        # Prompt optimizado para recibir JSON puro
+        response = client.models.generate_content(
+            model="gemini-1.5-flash", 
+            contents=f"Genera una receta de {query} en JSON puro. Campos: title, kcal, proteina, ingredients (lista), instructions (lista)."
+        )
         
-        response = client.models.generate_content(model=MODEL_ID, contents=prompt)
-        
-        # Limpieza de seguridad para evitar errores de tipo (NoneType)
-        raw_text = response.text if response.text else ""
-        match = re.search(r'\{.*\}', raw_text, re.DOTALL)
+        # Limpieza de seguridad para el texto recibido
+        text = response.text if response.text else ""
+        match = re.search(r'\{.*\}', text, re.DOTALL)
         
         if match:
             data = json.loads(match.group(0))
             return jsonify([{
-                "title": data.get("title", query).capitalize(),
+                "title": data.get("title", query),
                 "kcal": str(data.get("kcal", "N/A")),
                 "proteina": str(data.get("proteina", "N/A")),
                 "ingredients": data.get("ingredients", []),
@@ -43,17 +36,16 @@ def search_recipe():
                 "image_url": f"https://loremflickr.com/800/600/food,{query.replace(' ', ',')}"
             }]), 200
         else:
-            raise ValueError("No se pudo parsear el JSON de la IA")
+            raise ValueError("Formato de respuesta inválido")
 
     except Exception as e:
-        print(f"Error técnico: {e}")
+        # Fallback para que la app siempre reciba una estructura válida
         return jsonify([{
-            "title": "Chef en pausa",
-            "ingredients": ["Verificar API Key o conexión"],
+            "title": "Error al obtener receta",
+            "ingredients": ["No se pudo conectar con el Chef IA"],
             "instructions": [str(e)],
             "image_url": ""
-        }]), 200 # Enviamos 200 para que la App no rompa el flujo
+        }]), 200
 
 if __name__ == '__main__':
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host='0.0.0.0', port=port)
+    app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 10000)))
