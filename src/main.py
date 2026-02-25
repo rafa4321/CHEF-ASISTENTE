@@ -8,62 +8,40 @@ from flask_cors import CORS
 app = Flask(__name__)
 CORS(app)
 
-# Configuración del Cliente con modelo estable
+# Usamos 1.5-flash porque es el que tu Render permite (vimos el 404 del 2.0)
 MODEL_ID = "gemini-1.5-flash"
 client = genai.Client(api_key=os.environ.get("GOOGLE_API_KEY"))
 
 @app.route('/', methods=['GET'])
 def health():
-    """Ruta para que Render verifique que el servicio está vivo"""
-    return jsonify({"status": "ready", "model": MODEL_ID, "service": "Chef AI"}), 200
+    return jsonify({"status": "ready"}), 200
 
 @app.route('/search', methods=['GET'])
 def search_recipe():
-    query = request.args.get('query', 'comida venezolana')
-    
+    query = request.args.get('query', 'comida')
     try:
-        # Prompt optimizado para respuesta JSON pura
-        prompt = (f"Actúa como un Chef profesional. Genera una receta de {query} "
-                  "estrictamente en formato JSON con estas llaves: "
-                  "title, kcal, proteina, ingredients (lista), instructions (lista). "
-                  "No incluyas markdown, ni bloques de código, ni texto adicional.")
+        # Prompt de alta restricción
+        prompt = (f"Genera una receta de {query} en JSON puro. "
+                  "Estructura: {'title': '', 'kcal': '', 'proteina': '', 'ingredients': [], 'instructions': []}. "
+                  "No escribas NADA fuera del JSON, sin markdown.")
         
-        response = client.models.generate_content(
-            model=MODEL_ID,
-            contents=prompt
-        )
+        response = client.models.generate_content(model=MODEL_ID, contents=prompt)
         
+        # LIMPIEZA TOTAL: Extraemos solo lo que está entre llaves { }
         raw_text = response.text if response.text else ""
-        
-        # Extracción de seguridad con Regex (por si la IA envía texto extra)
         match = re.search(r'\{.*\}', raw_text, re.DOTALL)
         
         if match:
-            data = json.loads(match.group(0))
+            clean_json = json.loads(match.group(0))
+            # Inyectamos la imagen para la UI
+            clean_json["image_url"] = f"https://loremflickr.com/800/600/food,{query.replace(' ', ',')}"
+            return jsonify([clean_json]), 200 # Enviamos como lista [ ]
         else:
-            raise ValueError("La IA no devolvió un formato JSON válido")
-
-        # Formato final sincronizado con el modelo de Flutter
-        return jsonify([{
-            "title": data.get("title", query),
-            "kcal": str(data.get("kcal", "N/A")),
-            "proteina": str(data.get("proteina", "N/A")),
-            "ingredients": data.get("ingredients", []),
-            "instructions": data.get("instructions", []),
-            "image_url": f"https://loremflickr.com/800/600/food,{query.replace(' ', ',')}"
-        }]), 200
+            raise ValueError("La IA no envió JSON")
 
     except Exception as e:
-        print(f"Error en servidor: {e}")
-        return jsonify([{
-            "title": "Error de Conexión",
-            "kcal": "0",
-            "proteina": "0",
-            "ingredients": ["No se pudo obtener la receta"],
-            "instructions": [f"Detalle técnico: {str(e)}"],
-            "image_url": ""
-        }]), 500
+        print(f"DEBUG: {e}")
+        return jsonify([{"title": "Error", "instructions": [str(e)], "ingredients": [], "image_url": ""}]), 500
 
 if __name__ == '__main__':
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host='0.0.0.0', port=port)
+    app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 10000)))
