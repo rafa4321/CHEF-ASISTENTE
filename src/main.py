@@ -6,64 +6,61 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 
 app = Flask(__name__)
-CORS(app)  # Permite que tu app Flutter (Web/Mobile) acceda sin bloqueos
+CORS(app)
 
-# Configuración del cliente Google AI Studio
+# Configuración del Cliente con modelo estable
+MODEL_ID = "gemini-1.5-flash"
 client = genai.Client(api_key=os.environ.get("GOOGLE_API_KEY"))
 
 @app.route('/', methods=['GET'])
 def health():
-    """Ruta necesaria para que Render sepa que el servidor está vivo"""
-    return jsonify({"status": "ready", "service": "Chef AI API"}), 200
+    """Ruta para que Render verifique que el servicio está vivo"""
+    return jsonify({"status": "ready", "model": MODEL_ID, "service": "Chef AI"}), 200
 
 @app.route('/search', methods=['GET'])
 def search_recipe():
-    query = request.args.get('query', 'Receta sorpresa')
+    query = request.args.get('query', 'comida venezolana')
     
     try:
-        # Prompt de ingeniería de alta precisión
-        prompt = (
-            f"Actúa como un Chef experto. Genera una receta de '{query}' únicamente en formato JSON. "
-            "Usa exactamente estas llaves: title, kcal, proteina, ingredients (lista), instructions (lista). "
-            "No incluyas markdown (```json), ni texto antes o después del objeto JSON."
-        )
+        # Prompt optimizado para respuesta JSON pura
+        prompt = (f"Actúa como un Chef profesional. Genera una receta de {query} "
+                  "estrictamente en formato JSON con estas llaves: "
+                  "title, kcal, proteina, ingredients (lista), instructions (lista). "
+                  "No incluyas markdown, ni bloques de código, ni texto adicional.")
         
         response = client.models.generate_content(
-            model="gemini-2.0-flash",
+            model=MODEL_ID,
             contents=prompt
         )
         
         raw_text = response.text if response.text else ""
         
-        # Verificación profunda: Extracción por Regex por si Gemini envía Markdown
-        json_match = re.search(r'\{.*\}', raw_text, re.DOTALL)
+        # Extracción de seguridad con Regex (por si la IA envía texto extra)
+        match = re.search(r'\{.*\}', raw_text, re.DOTALL)
         
-        if json_match:
-            clean_json = json.loads(json_match.group(0))
+        if match:
+            data = json.loads(match.group(0))
         else:
-            raise ValueError("La IA no devolvió un JSON válido")
+            raise ValueError("La IA no devolvió un formato JSON válido")
 
-        # Construcción de la respuesta final sincronizada con Flutter
-        recipe_data = {
-            "title": clean_json.get("title", query),
-            "kcal": str(clean_json.get("kcal", "N/A")),
-            "proteina": str(clean_json.get("proteina", "N/A")),
-            "ingredients": clean_json.get("ingredients", []),
-            "instructions": clean_json.get("instructions", []),
-            "image_url": f"[https://loremflickr.com/800/600/food](https://loremflickr.com/800/600/food),{query.replace(' ', ',')}"
-        }
-
-        return jsonify([recipe_data]), 200
+        # Formato final sincronizado con el modelo de Flutter
+        return jsonify([{
+            "title": data.get("title", query),
+            "kcal": str(data.get("kcal", "N/A")),
+            "proteina": str(data.get("proteina", "N/A")),
+            "ingredients": data.get("ingredients", []),
+            "instructions": data.get("instructions", []),
+            "image_url": f"https://loremflickr.com/800/600/food,{query.replace(' ', ',')}"
+        }]), 200
 
     except Exception as e:
-        print(f"DEBUG ERROR: {str(e)}")
-        # Respuesta de emergencia profesional
+        print(f"Error en servidor: {e}")
         return jsonify([{
-            "title": "Chef ocupado",
+            "title": "Error de Conexión",
             "kcal": "0",
             "proteina": "0",
-            "ingredients": ["No pudimos conectar con el servidor"],
-            "instructions": [f"Error técnico: {str(e)}"],
+            "ingredients": ["No se pudo obtener la receta"],
+            "instructions": [f"Detalle técnico: {str(e)}"],
             "image_url": ""
         }]), 500
 
