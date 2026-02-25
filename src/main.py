@@ -6,10 +6,9 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 
 app = Flask(__name__)
-CORS(app)
+# Configuración de CORS total para evitar bloqueos en la App
+CORS(app, resources={r"/*": {"origins": "*"}})
 
-# Usamos 1.5-flash porque es el que tu Render permite (vimos el 404 del 2.0)
-MODEL_ID = "gemini-1.5-flash"
 client = genai.Client(api_key=os.environ.get("GOOGLE_API_KEY"))
 
 @app.route('/', methods=['GET'])
@@ -20,28 +19,43 @@ def health():
 def search_recipe():
     query = request.args.get('query', 'comida')
     try:
-        # Prompt de alta restricción
-        prompt = (f"Genera una receta de {query} en JSON puro. "
-                  "Estructura: {'title': '', 'kcal': '', 'proteina': '', 'ingredients': [], 'instructions': []}. "
-                  "No escribas NADA fuera del JSON, sin markdown.")
+        # Usamos 1.5-flash por estabilidad comprobada en tu instancia de Render
+        response = client.models.generate_content(
+            model="gemini-1.5-flash",
+            contents=f"Genera una receta de {query} en JSON puro. Llaves: title, kcal, proteina, ingredients (lista), instructions (lista). Sin markdown."
+        )
         
-        response = client.models.generate_content(model=MODEL_ID, contents=prompt)
-        
-        # LIMPIEZA TOTAL: Extraemos solo lo que está entre llaves { }
         raw_text = response.text if response.text else ""
+        # Limpieza extrema de caracteres no-JSON
         match = re.search(r'\{.*\}', raw_text, re.DOTALL)
         
         if match:
-            clean_json = json.loads(match.group(0))
-            # Inyectamos la imagen para la UI
-            clean_json["image_url"] = f"https://loremflickr.com/800/600/food,{query.replace(' ', ',')}"
-            return jsonify([clean_json]), 200 # Enviamos como lista [ ]
+            data = json.loads(match.group(0))
         else:
-            raise ValueError("La IA no envió JSON")
+            raise ValueError("No se encontró JSON")
+
+        # Construcción del objeto final
+        recipe = {
+            "title": data.get("title", query).capitalize(),
+            "kcal": str(data.get("kcal", "N/A")),
+            "proteina": str(data.get("proteina", "N/A")),
+            "ingredients": data.get("ingredients", []),
+            "instructions": data.get("instructions", []),
+            "image_url": f"https://loremflickr.com/800/600/food,{query.replace(' ', ',')}"
+        }
+        return jsonify([recipe]), 200
 
     except Exception as e:
-        print(f"DEBUG: {e}")
-        return jsonify([{"title": "Error", "instructions": [str(e)], "ingredients": [], "image_url": ""}]), 500
+        # Fallback: Si todo falla, enviamos este objeto para que la app NO se quede en blanco
+        print(f"Error detectado: {e}")
+        return jsonify([{
+            "title": "Chef temporalmente ausente",
+            "kcal": "0",
+            "proteina": "0",
+            "ingredients": ["Revisa tu conexión a internet"],
+            "instructions": ["Inténtalo de nuevo en unos segundos."],
+            "image_url": "https://via.placeholder.com/800x600?text=Error+de+Conexion"
+        }]), 200 # Enviamos 200 para que la app no explote
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 10000)))
